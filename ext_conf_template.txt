@@ -1,0 +1,35 @@
+# cat=Allgemein/10; type=options[DeepL=deepl,OpenAI (ChatGPT)=openai,Anthropic (Claude)=anthropic]; label=Standard-Anbieter: Wird im Übersetzen-Dialog vorausgewählt
+defaultProvider = deepl
+
+# cat=Allgemein/20; type=options[Sie (förmlich)=formal,du (informell)=informal,Neutral=default]; label=Anrede: Gilt für alle Anbieter, sofern die Zielsprache das unterscheidet
+formality = formal
+
+# cat=Allgemein/30; type=string; label=Stil-Hinweis (nur ChatGPT/Claude): Kurze Beschreibung von Ton und Zielgruppe, z. B. „Gehobener, herzlicher Ton eines 4-Sterne-Boutiquehotels in Wien“
+styleHint =
+
+# cat=Allgemein/40; type=string; label=Nicht übersetzen: Kommagetrennte Begriffe, die unverändert bleiben (z. B. Markennamen)
+doNotTranslate =
+
+# cat=Allgemein/50; type=string; label=Glossar (nur ChatGPT/Claude): Feste Übersetzungen, je Eintrag „Begriff=Übersetzung“, durch Semikolon getrennt
+glossary =
+
+# cat=Allgemein/60; type=string; label=Ausgeschlossene Felder: Kommagetrennt, „tabelle.feld“ oder „*.feld“ (zusätzlich zu den automatisch erkannten)
+excludeFields =
+
+# cat=DeepL/10; type=string; label=DeepL API-Key: Besser per Umgebungsvariable AI_TRANSLATOR_DEEPL_API_KEY setzen. Free-Keys (Endung „:fx“) werden automatisch erkannt.
+deeplApiKey =
+
+# cat=OpenAI/10; type=string; label=OpenAI API-Key: Besser per Umgebungsvariable AI_TRANSLATOR_OPENAI_API_KEY setzen
+openaiApiKey =
+
+# cat=OpenAI/20; type=string; label=OpenAI Modell
+openaiModel = gpt-5
+
+# cat=Anthropic/10; type=string; label=Anthropic API-Key: Besser per Umgebungsvariable AI_TRANSLATOR_ANTHROPIC_API_KEY setzen
+anthropicApiKey =
+
+# cat=Anthropic/20; type=string; label=Claude Modell
+anthropicModel = claude-opus-5-5
+
+# cat=Anthropic/30; type=options[Niedrig (schnell, günstig)=low,Mittel=medium,Hoch=high]; label=Claude Sorgfalt (effort)
+anthropicEffort = low

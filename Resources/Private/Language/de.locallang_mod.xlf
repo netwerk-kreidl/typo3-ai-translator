@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<xliff version="1.2" xmlns="urn:oasis:names:tc:xliff:document:1.2">
+    <file source-language="en" target-language="de" datatype="plaintext" original="EXT:ai_translator/Resources/Private/Language/locallang_mod.xlf">
+        <body>
+            <trans-unit id="title"><source>AI translation</source><target>KI-Übersetzung</target></trans-unit>
+            <trans-unit id="short_description"><source>Translate pages with DeepL, ChatGPT or Claude</source><target>Seiten mit DeepL, ChatGPT oder Claude übersetzen</target></trans-unit>
+            <trans-unit id="description"><source>Provider status, usage and log of all AI translations.</source><target>Status der Anbieter, Verbrauch und Protokoll aller KI-Übersetzungen.</target></trans-unit>
+            <trans-unit id="mlang_tabs_tab"><source>AI translation</source><target>KI-Übersetzung</target></trans-unit>
+            <trans-unit id="mlang_labels_tablabel"><source>Translate pages with DeepL, ChatGPT or Claude</source><target>Seiten mit DeepL, ChatGPT oder Claude übersetzen</target></trans-unit>
+            <trans-unit id="mlang_labels_tabdescr"><source>Provider status, usage and log of all AI translations.</source><target>Status der Anbieter, Verbrauch und Protokoll aller KI-Übersetzungen.</target></trans-unit>
+        </body>
+    </file>
+</xliff>

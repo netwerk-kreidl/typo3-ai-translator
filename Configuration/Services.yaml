@@ -1,0 +1,20 @@
+services:
+  _defaults:
+    autowire: true
+    autoconfigure: true
+    public: false
+
+  _instanceof:
+    Netwerk\AiTranslator\Provider\TranslationProviderInterface:
+      tags: ['ai_translator.provider']
+
+  Netwerk\AiTranslator\:
+    resource: '../Classes/*'
+
+  # Öffentlich, damit Handler und Dienst auch aus CLI-Befehlen/Tests erreichbar sind
+  Netwerk\AiTranslator\Localization\:
+    resource: '../Classes/Localization/*'
+    public: true
+
+  Netwerk\AiTranslator\Service\TranslationService:
+    public: true

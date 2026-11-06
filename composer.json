@@ -1,0 +1,30 @@
+{
+    "name": "netwerk/typo3-ai-translator",
+    "description": "KI-Übersetzung für TYPO3: Seiten, Inhaltselemente und Datei-Metadaten mit DeepL, OpenAI (ChatGPT) oder Anthropic (Claude) übersetzen.",
+    "type": "typo3-cms-extension",
+    "license": "proprietary",
+    "authors": [
+        { "name": "netwerk", "homepage": "https://www.netwerk.at" }
+    ],
+    "require": {
+        "php": "^8.2",
+        "typo3/cms-core": "^14.3",
+        "typo3/cms-backend": "^14.3",
+        "anthropic-ai/sdk": "^1.6"
+    },
+    "autoload": {
+        "psr-4": {
+            "Netwerk\\AiTranslator\\": "Classes/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Netwerk\\AiTranslator\\Tests\\": "Tests/"
+        }
+    },
+    "extra": {
+        "typo3/cms": {
+            "extension-key": "ai_translator"
+        }
+    }
+}

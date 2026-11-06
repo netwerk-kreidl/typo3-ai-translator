@@ -1,0 +1,165 @@
+<?php
+
+declare(strict_types=1);
+
+namespace Netwerk\AiTranslator\Provider;
+
+use Netwerk\AiTranslator\Configuration\ExtensionSettings;
+use TYPO3\CMS\Core\Http\RequestFactory;
+
+/**
+ * DeepL API v2. Alle Texte werden als HTML übertragen (tag_handling=html), damit Tags erhalten bleiben
+ * und „Nicht übersetzen“-Begriffe per <span translate="no"> geschützt werden können.
+ * Free-Keys (Endung „:fx“) nutzen automatisch den Free-Endpunkt.
+ */
+final class DeeplProvider implements TranslationProviderInterface
+{
+    private const MAX_TEXTS_PER_REQUEST = 50;
+    private const MAX_BYTES_PER_REQUEST = 100000;
+
+    public function __construct(
+        private readonly ExtensionSettings $settings,
+        private readonly RequestFactory $requestFactory,
+    ) {}
+
+    public function getIdentifier(): string
+    {
+        return 'deepl';
+    }
+
+    public function getLabel(): string
+    {
+        return 'DeepL';
+    }
+
+    public function isConfigured(): bool
+    {
+        return $this->settings->get('deeplApiKey') !== '';
+    }
+
+    public function translate(TranslationRequest $request): TranslationResult
+    {
+        $prepared = [];
+        foreach ($request->segments as $id => $segment) {
+            $prepared[$id] = $this->protectTerms(
+                $segment->isHtml ? $segment->text : nl2br(htmlspecialchars($segment->text, ENT_QUOTES | ENT_HTML5), false),
+                $request->style->doNotTranslate
+            );
+        }
+
+        $translations = [];
+        $characters = 0;
+        foreach ($this->chunk($prepared) as $chunk) {
+            $texts = $this->call(array_values($chunk), $request);
+            foreach (array_keys($chunk) as $i => $id) {
+                $text = $this->unprotectTerms($texts[$i] ?? '');
+                $translations[$id] = $request->segments[$id]->isHtml
+                    ? $text
+                    : html_entity_decode(preg_replace('#<br\s*/?>\R?#i', "\n", $text) ?? $text, ENT_QUOTES | ENT_HTML5, 'UTF-8');
+                $characters += mb_strlen($request->segments[$id]->text);
+            }
+        }
+        return new TranslationResult($translations, $this->getIdentifier(), 'deepl-v2', $characters);
+    }
+
+    /**
+     * @param list<string> $texts
+     * @return list<string>
+     */
+    private function call(array $texts, TranslationRequest $request): array
+    {
+        $apiKey = $this->settings->get('deeplApiKey');
+        $endpoint = str_ends_with($apiKey, ':fx') ? 'https://api-free.deepl.com/v2/translate' : 'https://api.deepl.com/v2/translate';
+        $body = array_filter([
+            'text' => $texts,
+            'source_lang' => strtoupper($request->languages->sourceLanguage),
+            'target_lang' => $this->targetLanguage($request->languages),
+            'tag_handling' => 'html',
+            'formality' => match ($request->style->formality) {
+                'formal' => 'prefer_more',
+                'informal' => 'prefer_less',
+                default => null,
+            },
+            'context' => $request->context ?: null,
+        ]);
+        try {
+            $response = $this->requestFactory->request($endpoint, 'POST', [
+                'headers' => ['Authorization' => 'DeepL-Auth-Key ' . $apiKey, 'Content-Type' => 'application/json'],
+                'json' => $body,
+                'timeout' => 120,
+                'http_errors' => false,
+            ]);
+        } catch (\Throwable $e) {
+            throw new TranslationException('DeepL: Keine Verbindung zur API.', 1793130301, $e);
+        }
+        $status = $response->getStatusCode();
+        $data = json_decode((string)$response->getBody(), true) ?: [];
+        if ($status !== 200) {
+            throw new TranslationException(match ($status) {
+                403 => 'DeepL: Der API-Key ist ungültig.',
+                456 => 'DeepL: Das Zeichenkontingent ist aufgebraucht.',
+                429 => 'DeepL: Zu viele Anfragen – bitte später erneut versuchen.',
+                400 => 'DeepL: ' . (string)($data['message'] ?? 'Ungültige Anfrage') . ' (Sprache wird ggf. nicht unterstützt)',
+                default => 'DeepL: ' . (string)($data['message'] ?? $response->getReasonPhrase()),
+            }, 1793130302);
+        }
+        return array_map(static fn(array $t): string => (string)($t['text'] ?? ''), $data['translations'] ?? []);
+    }
+
+    /**
+     * DeepL-Zielsprachen mit Varianten: EN-US/EN-GB, PT-BR/PT-PT, ZH-HANS.
+     */
+    private function targetLanguage(LanguagePair $languages): string
+    {
+        $language = strtoupper($languages->targetLanguage);
+        return match ($language) {
+            'EN' => $languages->targetRegion === 'US' ? 'EN-US' : 'EN-GB',
+            'PT' => $languages->targetRegion === 'BR' ? 'PT-BR' : 'PT-PT',
+            'ZH' => 'ZH-HANS',
+            default => $language,
+        };
+    }
+
+    /**
+     * @param list<string> $terms
+     */
+    private function protectTerms(string $html, array $terms): string
+    {
+        foreach ($terms as $term) {
+            // nur im Text, nicht in Tags/Attributen
+            $html = preg_replace_callback(
+                '/(<[^>]*>)|(' . preg_quote(htmlspecialchars($term, ENT_QUOTES | ENT_HTML5), '/') . ')/u',
+                static fn(array $m): string => $m[1] !== '' ? $m[1] : '<span translate="no" data-ait="1">' . $m[2] . '</span>',
+                $html
+            ) ?? $html;
+        }
+        return $html;
+    }
+
+    private function unprotectTerms(string $html): string
+    {
+        return preg_replace('#<span translate="no" data-ait="1">(.*?)</span>#su', '$1', $html) ?? $html;
+    }
+
+    /**
+     * @param array<string, string> $texts
+     * @return iterable<array<string, string>>
+     */
+    private function chunk(array $texts): iterable
+    {
+        $chunk = [];
+        $bytes = 0;
+        foreach ($texts as $id => $text) {
+            if ($chunk !== [] && (count($chunk) >= self::MAX_TEXTS_PER_REQUEST || $bytes + strlen($text) > self::MAX_BYTES_PER_REQUEST)) {
+                yield $chunk;
+                $chunk = [];
+                $bytes = 0;
+            }
+            $chunk[$id] = $text;
+            $bytes += strlen($text);
+        }
+        if ($chunk !== []) {
+            yield $chunk;
+        }
+    }
+}

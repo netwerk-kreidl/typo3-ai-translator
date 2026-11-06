@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<xliff version="1.2" xmlns="urn:oasis:names:tc:xliff:document:1.2">
+    <file source-language="en" target-language="de" datatype="plaintext" original="EXT:ai_translator/Resources/Private/Language/locallang.xlf">
+        <body>
+            <trans-unit id="handler.label"><source>AI translation with %s</source><target>KI-Übersetzung mit %s</target></trans-unit>
+            <trans-unit id="handler.description"><source>Creates the translation and translates all texts automatically – including page properties, URL, link titles and image texts. Please review the result.</source><target>Legt die Übersetzung an und übersetzt alle Texte automatisch – inklusive Seiteneigenschaften, URL, Linktitel und Bildtexte. Bitte das Ergebnis kontrollieren.</target></trans-unit>
+            <trans-unit id="permission.header"><source>AI translation</source><target>KI-Übersetzung</target></trans-unit>
+            <trans-unit id="permission.translate"><source>Use AI translation</source><target>KI-Übersetzung verwenden</target></trans-unit>
+            <trans-unit id="permission.translate.description"><source>Shows the “AI translation” options in the translation wizard. Each translation is sent to an external provider and may cause costs.</source><target>Zeigt die Optionen „KI-Übersetzung“ im Übersetzen-Dialog. Jede Übersetzung wird an einen externen Anbieter übertragen und kann Kosten verursachen.</target></trans-unit>
+        </body>
+    </file>
+</xliff>

@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<xliff version="1.2" xmlns="urn:oasis:names:tc:xliff:document:1.2">
+    <file source-language="en" datatype="plaintext" original="EXT:ai_translator/Resources/Private/Language/locallang.xlf">
+        <body>
+            <trans-unit id="handler.label"><source>AI translation with %s</source></trans-unit>
+            <trans-unit id="handler.description"><source>Creates the translation and translates all texts automatically – including page properties, URL, link titles and image texts. Please review the result.</source></trans-unit>
+            <trans-unit id="permission.header"><source>AI translation</source></trans-unit>
+            <trans-unit id="permission.translate"><source>Use AI translation</source></trans-unit>
+            <trans-unit id="permission.translate.description"><source>Shows the “AI translation” options in the translation wizard. Each translation is sent to an external provider and may cause costs.</source></trans-unit>
+        </body>
+    </file>
+</xliff>
