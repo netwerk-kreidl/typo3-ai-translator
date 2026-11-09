@@ -214,6 +214,22 @@ final class RecordFinder
         return $tree;
     }
 
+    /**
+     * Metadaten einer Datei in der Standardsprache.
+     *
+     * @return array<string, mixed>|null
+     */
+    public function findFileMetadata(int $fileUid): ?array
+    {
+        $qb = $this->connectionPool->getQueryBuilderForTable('sys_file_metadata');
+        $qb->getRestrictions()->removeAll();
+        $row = $qb->select('*')->from('sys_file_metadata')->where(
+            $qb->expr()->eq('file', $qb->createNamedParameter($fileUid, Connection::PARAM_INT)),
+            $qb->expr()->eq('sys_language_uid', 0),
+        )->setMaxResults(1)->executeQuery()->fetchAssociative();
+        return $row === false ? null : $row;
+    }
+
     public function getLanguageCapability(string $table): LanguageAwareSchemaCapability
     {
         /** @var LanguageAwareSchemaCapability */

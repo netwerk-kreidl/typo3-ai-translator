@@ -33,7 +33,7 @@ final class FieldResolver
      */
     private const ONLY_FIELDS = [
         'sys_file_reference' => ['title', 'alternative', 'description', 'link'],
-        'sys_file_metadata' => ['title', 'alternative', 'description', 'caption', 'copyright'],
+        'sys_file_metadata' => ['title', 'alternative', 'description', 'caption'],
     ];
 
     /** Technische Verknüpfungsfelder von Inline-Kindern */

@@ -15,6 +15,7 @@ use Netwerk\AiTranslator\Provider\TranslationStyle;
 use Netwerk\AiTranslator\Queue\QueueRepository;
 use Netwerk\AiTranslator\Security\Permission;
 use Netwerk\AiTranslator\Service\RecordFinder;
+use Netwerk\AiTranslator\Status\FileStatusService;
 use Netwerk\AiTranslator\Status\PageStatus;
 use Netwerk\AiTranslator\Status\StatusService;
 use Psr\Http\Message\ResponseInterface;
@@ -53,6 +54,7 @@ final readonly class ModuleController
         private StatusService $statusService,
         private QueueRepository $queue,
         private PageRenderer $pageRenderer,
+        private FileStatusService $fileStatus,
     ) {}
 
     public function overviewAction(ServerRequestInterface $request): ResponseInterface
@@ -112,12 +114,7 @@ final readonly class ModuleController
         }
 
         $queueCounts = $this->queue->getCounts();
-        $recent = [];
-        foreach ($this->queue->findRecent(30) as $entry) {
-            $entry['pageTitle'] = (string)(BackendUtility::getRecord('pages', (int)$entry['page_uid'], 'title')['title'] ?? '');
-            $entry['languageTitle'] = isset($languages[(int)$entry['language']]) ? $languages[(int)$entry['language']]->getTitle() : (string)$entry['language'];
-            $recent[] = $entry;
-        }
+        $recent = $this->getRecentQueue($languages);
 
         $providers = [];
         foreach ($this->providers->configured($this->settings->get('defaultProvider', 'deepl')) as $id => $provider) {
@@ -147,6 +144,86 @@ final readonly class ModuleController
     }
 
     /**
+     * Datei-Metadaten: Übersetzungsstand je Ordner und Sprache, Massenübersetzung.
+     */
+    public function filesAction(ServerRequestInterface $request): ResponseInterface
+    {
+        $view = $this->createView($request, 'files');
+        $query = $request->getQueryParams();
+        $languages = $this->fileStatus->getLanguages();
+        $languageId = (int)($query['language'] ?? 0);
+        $languageId = isset($languages[$languageId]) ? $languageId : (int)array_key_first($languages);
+        $storages = $this->fileStatus->getStorages();
+        $storageUid = (int)($query['storage'] ?? 0);
+        $storageUid = isset($storages[$storageUid]) ? $storageUid : (int)array_key_first($storages);
+        $folders = $storageUid > 0 ? $this->fileStatus->getFolders($storageUid) : [];
+        $folder = (string)($query['folder'] ?? '/');
+        $folder = in_array($folder, $folders, true) ? $folder : '/';
+        $recursive = (bool)($query['recursive'] ?? true);
+        $filter = (string)($query['filter'] ?? 'open');
+
+        $files = [];
+        $summary = [FileStatusService::STATE_MISSING => 0, FileStatusService::STATE_OUTDATED => 0, FileStatusService::STATE_CURRENT => 0, FileStatusService::STATE_EMPTY => 0];
+        $found = [];
+        if ($languageId > 0 && $storageUid > 0) {
+            $found = $this->fileStatus->findFiles($storageUid, $folder, $recursive);
+            $openQueue = $this->queue->getOpenPages($languageId, 'sys_file');
+            foreach ($found as $file) {
+                $status = $this->fileStatus->getStatus($file['uid'], $languageId);
+                $summary[$status['state']]++;
+                $visible = match ($filter) {
+                    'all' => true,
+                    'texts' => $status['state'] !== FileStatusService::STATE_EMPTY,
+                    default => in_array($status['state'], [FileStatusService::STATE_MISSING, FileStatusService::STATE_OUTDATED], true),
+                };
+                if (!$visible) {
+                    continue;
+                }
+                $files[] = $file + $status + [
+                    'queued' => $openQueue[$file['uid']] ?? '',
+                    'editUrl' => $status['metaUid'] > 0 ? (string)$this->uriBuilder->buildUriFromRoute('record_edit', [
+                        'edit' => ['sys_file_metadata' => [($status['translationUid'] ?: $status['metaUid']) => 'edit']],
+                        'returnUrl' => (string)$request->getUri(),
+                    ]) : '',
+                ];
+            }
+        }
+
+        $providers = [];
+        foreach ($this->providers->configured($this->settings->get('defaultProvider', 'deepl')) as $id => $provider) {
+            $providers[$id] = $provider->getLabel();
+        }
+        $queueCounts = $this->queue->getCounts();
+        $this->pageRenderer->loadJavaScriptModule('@netwerk/ai-translator/queue.js');
+        $view->assignMultiple([
+            'languages' => $languages,
+            'languageId' => $languageId,
+            'storages' => count($storages) > 1 ? $storages : [],
+            'storageUid' => $storageUid,
+            'folders' => $folders,
+            'folder' => $folder,
+            'recursive' => $recursive,
+            'filter' => $filter,
+            'files' => $files,
+            'fileCount' => count($found),
+            'limitReached' => count($found) >= FileStatusService::LIMIT,
+            'summary' => $summary,
+            'providers' => $providers,
+            'canTranslate' => Permission::canTranslate() && $providers !== [],
+            'queueCounts' => $queueCounts,
+            'queueOpen' => $queueCounts[QueueRepository::PENDING] + $queueCounts[QueueRepository::RUNNING],
+            'queueRecent' => $this->getRecentQueue($languages),
+            'autostart' => (bool)($query['start'] ?? false),
+            'enqueueUrl' => (string)$this->uriBuilder->buildUriFromRoute('ai_translator.enqueue'),
+            'queueUrl' => (string)$this->uriBuilder->buildUriFromRoute('ai_translator.queue'),
+            'selfUrl' => (string)$this->uriBuilder->buildUriFromRoute('ai_translator.files', [
+                'language' => $languageId, 'storage' => $storageUid, 'folder' => $folder, 'recursive' => (int)$recursive, 'filter' => $filter,
+            ]),
+        ]);
+        return $view->renderResponse('Module/Files');
+    }
+
+    /**
      * Ausgewählte Seiten in die Warteschlange stellen.
      */
     public function enqueueAction(ServerRequestInterface $request): ResponseInterface
@@ -154,24 +231,28 @@ final readonly class ModuleController
         $body = (array)$request->getParsedBody();
         $languageId = (int)($body['language'] ?? 0);
         $provider = (string)($body['provider'] ?? '');
-        $pageUids = array_values(array_filter(array_map(intval(...), (array)($body['pages'] ?? []))));
-        $back = ['site' => (string)($body['site'] ?? ''), 'language' => $languageId, 'filter' => (string)($body['filter'] ?? 'open')];
+        $isFiles = ($body['type'] ?? '') === 'files';
+        $pageUids = array_values(array_filter(array_map(intval(...), (array)($body[$isFiles ? 'files' : 'pages'] ?? []))));
+        $back = $isFiles
+            ? ['language' => $languageId, 'storage' => (int)($body['storage'] ?? 0), 'folder' => (string)($body['folder'] ?? '/'), 'recursive' => (int)($body['recursive'] ?? 1), 'filter' => (string)($body['filter'] ?? 'open')]
+            : ['site' => (string)($body['site'] ?? ''), 'language' => $languageId, 'filter' => (string)($body['filter'] ?? 'open')];
+        $route = $isFiles ? 'ai_translator.files' : 'ai_translator';
 
         if (!Permission::canTranslate() || !Permission::canEditLanguage($languageId) || !$this->providers->has($provider)) {
             $this->addFlashMessage('Keine Berechtigung oder kein Anbieter gewählt.', ContextualFeedbackSeverity::ERROR, 'Massenübersetzung');
-            return new RedirectResponse((string)$this->uriBuilder->buildUriFromRoute('ai_translator', $back));
+            return new RedirectResponse((string)$this->uriBuilder->buildUriFromRoute($route, $back));
         }
         if ($pageUids === []) {
-            $this->addFlashMessage('Bitte mindestens eine Seite auswählen.', ContextualFeedbackSeverity::WARNING, 'Massenübersetzung');
-            return new RedirectResponse((string)$this->uriBuilder->buildUriFromRoute('ai_translator', $back));
+            $this->addFlashMessage($isFiles ? 'Bitte mindestens eine Datei auswählen.' : 'Bitte mindestens eine Seite auswählen.', ContextualFeedbackSeverity::WARNING, 'Massenübersetzung');
+            return new RedirectResponse((string)$this->uriBuilder->buildUriFromRoute($route, $back));
         }
-        $added = $this->queue->add($pageUids, $languageId, $provider, (int)($GLOBALS['BE_USER']->user['uid'] ?? 0));
+        $added = $this->queue->add($pageUids, $languageId, $provider, (int)($GLOBALS['BE_USER']->user['uid'] ?? 0), $isFiles ? 'sys_file' : 'pages');
         $this->addFlashMessage(
-            sprintf('%d Seiten wurden in die Warteschlange gestellt.', $added),
+            sprintf($isFiles ? '%d Dateien wurden in die Warteschlange gestellt.' : '%d Seiten wurden in die Warteschlange gestellt.', $added),
             ContextualFeedbackSeverity::INFO,
             'Massenübersetzung'
         );
-        return new RedirectResponse((string)$this->uriBuilder->buildUriFromRoute('ai_translator', $back + ['start' => 1]));
+        return new RedirectResponse((string)$this->uriBuilder->buildUriFromRoute($route, $back + ['start' => 1]));
     }
 
     /**
@@ -257,6 +338,23 @@ final readonly class ModuleController
         return new RedirectResponse((string)$this->uriBuilder->buildUriFromRoute('ai_translator.providers'));
     }
 
+    /**
+     * @param array<int, \TYPO3\CMS\Core\Site\Entity\SiteLanguage> $languages
+     * @return list<array<string, mixed>>
+     */
+    private function getRecentQueue(array $languages): array
+    {
+        $recent = [];
+        foreach ($this->queue->findRecent(30) as $entry) {
+            $entry['pageTitle'] = ($entry['tablename'] ?? 'pages') === 'sys_file'
+                ? 'Datei: ' . (string)(BackendUtility::getRecord('sys_file', (int)$entry['page_uid'], 'name')['name'] ?? '')
+                : (string)(BackendUtility::getRecord('pages', (int)$entry['page_uid'], 'title')['title'] ?? '');
+            $entry['languageTitle'] = isset($languages[(int)$entry['language']]) ? $languages[(int)$entry['language']]->getTitle() : (string)$entry['language'];
+            $recent[] = $entry;
+        }
+        return $recent;
+    }
+
     private function createView(ServerRequestInterface $request, string $current): ModuleTemplate
     {
         $view = $this->moduleTemplateFactory->create($request);
@@ -264,6 +362,7 @@ final readonly class ModuleController
         $view->assignMultiple([
             'nav' => [
                 ['id' => 'overview', 'label' => 'Übersicht & Massenübersetzung', 'url' => (string)$this->uriBuilder->buildUriFromRoute('ai_translator'), 'active' => $current === 'overview'],
+                ['id' => 'files', 'label' => 'Dateien (Metadaten)', 'url' => (string)$this->uriBuilder->buildUriFromRoute('ai_translator.files'), 'active' => $current === 'files'],
                 ['id' => 'providers', 'label' => 'Anbieter & Protokoll', 'url' => (string)$this->uriBuilder->buildUriFromRoute('ai_translator.providers'), 'active' => $current === 'providers'],
             ],
         ]);

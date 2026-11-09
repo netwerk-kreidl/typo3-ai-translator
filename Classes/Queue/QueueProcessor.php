@@ -32,18 +32,30 @@ final readonly class QueueProcessor
         }
         $uid = (int)$item['uid'];
         $pageUid = (int)$item['page_uid'];
-        $title = (string)(BackendUtility::getRecord('pages', $pageUid, 'title')['title'] ?? ('#' . $pageUid));
+        $isFile = ($item['tablename'] ?? 'pages') === 'sys_file';
+        $title = $isFile
+            ? (string)(BackendUtility::getRecord('sys_file', $pageUid, 'name')['name'] ?? ('Datei #' . $pageUid))
+            : (string)(BackendUtility::getRecord('pages', $pageUid, 'title')['title'] ?? ('#' . $pageUid));
         try {
-            $result = $this->translationService->updatePage($pageUid, (int)$item['language'], (string)$item['provider']);
-            $message = match (true) {
-                $result['createdPage'] => sprintf('Seite angelegt, %d Datensätze übersetzt', $result['records']),
-                $result['records'] > 0 => sprintf('%d Datensätze aktualisiert', $result['records']),
-                default => 'Bereits aktuell',
-            };
+            if ($isFile) {
+                $result = $this->translationService->updateFileMetadata($pageUid, (int)$item['language'], (string)$item['provider']);
+                $message = match (true) {
+                    $result['created'] => 'Metadaten übersetzt',
+                    $result['fields'] > 0 => sprintf('%d Felder aktualisiert', $result['fields']),
+                    default => 'Bereits aktuell bzw. keine Texte',
+                };
+            } else {
+                $result = $this->translationService->updatePage($pageUid, (int)$item['language'], (string)$item['provider']);
+                $message = match (true) {
+                    $result['createdPage'] => sprintf('Seite angelegt, %d Datensätze übersetzt', $result['records']),
+                    $result['records'] > 0 => sprintf('%d Datensätze aktualisiert', $result['records']),
+                    default => 'Bereits aktuell',
+                };
+            }
             $this->queue->finish($uid, QueueRepository::DONE, $message);
             return ['uid' => $uid, 'page' => $pageUid, 'title' => $title, 'status' => QueueRepository::DONE, 'message' => $message];
         } catch (\Throwable $e) {
-            $this->logger->error('AI translation of page {page} failed: {message}', ['page' => $pageUid, 'message' => $e->getMessage(), 'exception' => $e]);
+            $this->logger->error('AI translation of {table} {page} failed: {message}', ['table' => $item['tablename'] ?? 'pages', 'page' => $pageUid, 'message' => $e->getMessage(), 'exception' => $e]);
             $this->queue->finish($uid, QueueRepository::ERROR, $e->getMessage());
             return ['uid' => $uid, 'page' => $pageUid, 'title' => $title, 'status' => QueueRepository::ERROR, 'message' => $e->getMessage()];
         }

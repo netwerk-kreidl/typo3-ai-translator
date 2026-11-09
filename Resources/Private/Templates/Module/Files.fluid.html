@@ -1,0 +1,176 @@
+<html xmlns:f="http://typo3.org/ns/TYPO3/CMS/Fluid/ViewHelpers" xmlns:core="http://typo3.org/ns/TYPO3/CMS/Core/ViewHelpers" data-namespace-typo3-fluid="true">
+<f:layout name="Module" />
+
+<f:section name="Content">
+    <f:render partial="Nav" arguments="{_all}" />
+    <p>
+        Titel, Alternativtext und Beschreibung aus den Metadaten der Dateien (Modul „Dateiliste“). Diese Texte gelten überall,
+        wo die Datei verwendet wird, sofern dort nichts Eigenes eingetragen ist.
+    </p>
+
+    <f:if condition="!{languages}">
+        <f:then><p>Es ist keine weitere Sprache eingerichtet bzw. freigegeben.</p></f:then>
+        <f:else>
+            <form method="get" action="{f:be.uri(route: 'ai_translator.files')}" class="d-flex flex-wrap gap-3 align-items-end mb-3">
+                <f:if condition="{storages}">
+                    <f:then>
+                        <div>
+                            <label class="form-label" for="ait-storage">Speicher</label>
+                            <select id="ait-storage" name="storage" class="form-select" data-ait-autosubmit>
+                                <f:for each="{storages}" as="name" key="uid">
+                                    <option value="{uid}"{f:if(condition: '{uid} == {storageUid}', then: ' selected')}>{name}</option>
+                                </f:for>
+                            </select>
+                        </div>
+                    </f:then>
+                    <f:else><input type="hidden" name="storage" value="{storageUid}" /></f:else>
+                </f:if>
+                <div>
+                    <label class="form-label" for="ait-folder">Ordner</label>
+                    <select id="ait-folder" name="folder" class="form-select" data-ait-autosubmit>
+                        <f:for each="{folders}" as="path">
+                            <option value="{path}"{f:if(condition: '{path} == {folder}', then: ' selected')}>{path}</option>
+                        </f:for>
+                    </select>
+                </div>
+                <div>
+                    <label class="form-label" for="ait-recursive">Unterordner</label>
+                    <select id="ait-recursive" name="recursive" class="form-select" data-ait-autosubmit>
+                        <option value="1"{f:if(condition: recursive, then: ' selected')}>einbeziehen</option>
+                        <option value="0"{f:if(condition: recursive, else: ' selected')}>nur dieser Ordner</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="form-label" for="ait-language">Sprache</label>
+                    <select id="ait-language" name="language" class="form-select" data-ait-autosubmit>
+                        <f:for each="{languages}" as="language" key="id">
+                            <option value="{id}"{f:if(condition: '{id} == {languageId}', then: ' selected')}>{language.title}</option>
+                        </f:for>
+                    </select>
+                </div>
+                <div>
+                    <label class="form-label" for="ait-filter">Anzeigen</label>
+                    <select id="ait-filter" name="filter" class="form-select" data-ait-autosubmit>
+                        <option value="open"{f:if(condition: '{filter} == "open"', then: ' selected')}>Nur mit Handlungsbedarf</option>
+                        <option value="texts"{f:if(condition: '{filter} == "texts"', then: ' selected')}>Alle mit Texten</option>
+                        <option value="all"{f:if(condition: '{filter} == "all"', then: ' selected')}>Alle Dateien</option>
+                    </select>
+                </div>
+                <noscript><button type="submit" class="btn btn-default">Anzeigen</button></noscript>
+            </form>
+
+            <p>
+                {fileCount} Dateien:
+                <span class="badge badge-danger">{summary.missing}</span> nicht übersetzt ·
+                <span class="badge badge-warning">{summary.outdated}</span> veraltet ·
+                <span class="badge badge-success">{summary.current}</span> aktuell ·
+                <span class="badge badge-default">{summary.empty}</span> ohne Texte
+            </p>
+            <f:if condition="{limitReached}">
+                <f:be.infobox state="1">Es werden höchstens 1.000 Dateien geprüft – bitte einen Unterordner wählen.</f:be.infobox>
+            </f:if>
+            <f:if condition="{summary.empty}">
+                <p class="small text-body-secondary">
+                    Dateien „ohne Texte“ haben auf Deutsch weder Titel noch Alternativtext oder Beschreibung – dort gibt es nichts zu übersetzen.
+                    Alternativtexte zuerst auf Deutsch pflegen (Dateiliste → Metadaten bearbeiten).
+                </p>
+            </f:if>
+
+            <f:if condition="!{canTranslate}">
+                <f:be.infobox title="Massenübersetzung nicht verfügbar" state="1">
+                    <f:if condition="{providers}">
+                        <f:then>Dir fehlt die Berechtigung „KI-Übersetzung verwenden“.</f:then>
+                        <f:else>Es ist noch kein Anbieter eingerichtet (API-Key fehlt).</f:else>
+                    </f:if>
+                </f:be.infobox>
+            </f:if>
+
+            <f:render partial="Queue" arguments="{_all}" />
+
+            <form method="post" action="{enqueueUrl}">
+                <input type="hidden" name="type" value="files" />
+                <input type="hidden" name="language" value="{languageId}" />
+                <input type="hidden" name="storage" value="{storageUid}" />
+                <input type="hidden" name="folder" value="{folder}" />
+                <input type="hidden" name="recursive" value="{f:if(condition: recursive, then: '1', else: '0')}" />
+                <input type="hidden" name="filter" value="{filter}" />
+                <f:if condition="{files}">
+                    <f:then>
+                        <div class="table-fit">
+                            <table class="table table-striped table-hover mb-0">
+                                <thead>
+                                    <tr>
+                                        <th class="col-checkbox">
+                                            <f:if condition="{canTranslate}">
+                                                <span class="form-check form-check-type-toggle">
+                                                    <input type="checkbox" class="form-check-input" data-ait-toggle-all aria-label="Alle angezeigten Dateien auswählen" />
+                                                </span>
+                                            </f:if>
+                                        </th>
+                                        <th>Datei</th>
+                                        <th>Status</th>
+                                        <th>Deutsch</th>
+                                        <th>Übersetzung</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <f:for each="{files}" as="file">
+                                        <tr>
+                                            <td class="col-checkbox">
+                                                <f:if condition="{canTranslate} && ({file.state} == 'missing' || {file.state} == 'outdated') && !{file.queued}">
+                                                    <span class="form-check form-check-type-toggle">
+                                                        <input type="checkbox" class="form-check-input" name="files[]" value="{file.uid}" id="ait-file-{file.uid}" data-ait-page />
+                                                    </span>
+                                                </f:if>
+                                            </td>
+                                            <td>
+                                                <label for="ait-file-{file.uid}" class="mb-0 fw-normal">
+                                                    <f:if condition="{file.editUrl}">
+                                                        <f:then><a href="{file.editUrl}" title="Metadaten bearbeiten">{file.name}</a></f:then>
+                                                        <f:else>{file.name}</f:else>
+                                                    </f:if>
+                                                </label>
+                                                <div class="small text-body-secondary">{file.identifier}</div>
+                                            </td>
+                                            <td>
+                                                <f:switch expression="{file.state}">
+                                                    <f:case value="missing"><span class="badge badge-danger">nicht übersetzt</span></f:case>
+                                                    <f:case value="outdated"><span class="badge badge-warning">veraltet</span></f:case>
+                                                    <f:case value="current"><span class="badge badge-success">aktuell</span></f:case>
+                                                    <f:defaultCase><span class="badge badge-default">ohne Texte</span></f:defaultCase>
+                                                </f:switch>
+                                                <f:if condition="{file.queued}"><span class="badge badge-default">in Warteschlange</span></f:if>
+                                                <f:if condition="{file.fields}">
+                                                    <div class="small">Geändert: <f:for each="{file.fields}" as="label" iteration="i">{label}<f:if condition="{i.isLast}"><f:else>, </f:else></f:if></f:for></div>
+                                                </f:if>
+                                            </td>
+                                            <td class="small">
+                                                <f:for each="{file.source}" as="value" key="label"><div><strong>{label}:</strong> {value -> f:format.crop(maxCharacters: 120)}</div></f:for>
+                                            </td>
+                                            <td class="small">
+                                                <f:for each="{file.translation}" as="value" key="label"><div><strong>{label}:</strong> {value -> f:format.crop(maxCharacters: 120)}</div></f:for>
+                                            </td>
+                                        </tr>
+                                    </f:for>
+                                </tbody>
+                            </table>
+                        </div>
+                        <f:if condition="{canTranslate}">
+                            <div class="d-flex flex-wrap gap-2 align-items-center mt-3">
+                                <label for="ait-provider" class="form-label mb-0">Ausgewählte Dateien übersetzen mit</label>
+                                <select id="ait-provider" name="provider" class="form-select w-auto">
+                                    <f:for each="{providers}" as="label" key="id"><option value="{id}">{label}</option></f:for>
+                                </select>
+                                <button type="submit" class="btn btn-primary">
+                                    <core:icon identifier="ai-translator-handler" size="small" /> In Warteschlange stellen &amp; starten
+                                </button>
+                            </div>
+                        </f:if>
+                    </f:then>
+                    <f:else><p>Keine Dateien mit Handlungsbedarf in diesem Ordner.</p></f:else>
+                </f:if>
+            </form>
+        </f:else>
+    </f:if>
+</f:section>
+</html>

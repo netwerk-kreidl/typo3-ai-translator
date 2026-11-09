@@ -23,6 +23,7 @@ use TYPO3\CMS\Core\DataHandling\Model\RecordStateFactory;
 use TYPO3\CMS\Core\DataHandling\SlugHelper;
 use TYPO3\CMS\Core\Site\Entity\Site;
 use TYPO3\CMS\Core\Site\SiteFinder;
+use TYPO3\CMS\Core\Exception\SiteNotFoundException;
 use TYPO3\CMS\Core\Utility\GeneralUtility;
 
 /**
@@ -98,7 +99,7 @@ final class TranslationService
                     'table' => $outdated->table,
                     'row' => $row,
                     'fields' => array_intersect_key($all, $outdated->fields),
-                    'hint' => $outdated->table === 'pages' ? 'Seiteneigenschaften' : $this->fieldResolver->getRecordTypeLabel($outdated->table, $row),
+                    'hint' => $this->hint($outdated->table, $row),
                     'translationUid' => $outdated->translationUid,
                 ];
                 $fields += count($outdated->fields);
@@ -177,6 +178,42 @@ final class TranslationService
     }
 
     /**
+     * Übersetzt die Metadaten einer Datei (Titel, Alternativtext, Beschreibung) bzw. bringt eine bestehende
+     * Übersetzung auf den aktuellen Stand (nur geänderte Felder).
+     *
+     * @return array{created: bool, fields: int}
+     * @throws TranslationException
+     */
+    public function updateFileMetadata(int $fileUid, int $targetLanguageId, string $providerId): array
+    {
+        $metadata = $this->finder->findFileMetadata($fileUid);
+        if ($metadata === null || $this->fieldResolver->getTranslatableFields('sys_file_metadata', $metadata) === []
+            || !$this->hasText($metadata, $this->fieldResolver->getTranslatableFields('sys_file_metadata', $metadata))) {
+            return ['created' => false, 'fields' => 0];
+        }
+        $translationUid = $this->finder->findTranslationUid('sys_file_metadata', (int)$metadata['uid'], $targetLanguageId);
+        if ($translationUid === null) {
+            $this->translateRecord('sys_file_metadata', (int)$metadata['uid'], $targetLanguageId, $providerId, LocalizationMode::TRANSLATE);
+            return ['created' => true, 'fields' => count($this->fieldResolver->getTranslatableFields('sys_file_metadata', $metadata))];
+        }
+        $translation = BackendUtility::getRecord('sys_file_metadata', $translationUid);
+        $changed = $translation !== null ? $this->statusService->getChangedFields('sys_file_metadata', $metadata, $translation) : [];
+        if ($changed === []) {
+            return ['created' => false, 'fields' => 0];
+        }
+        $items = [[
+            'table' => 'sys_file_metadata',
+            'row' => $metadata,
+            'fields' => array_intersect_key($this->fieldResolver->getTranslatableFields('sys_file_metadata', $metadata), $changed),
+            'hint' => $this->hint('sys_file_metadata', $metadata),
+            'translationUid' => $translationUid,
+        ]];
+        $page = ['uid' => 0, 'title' => $this->getFileName($fileUid)];
+        $this->run($items, [], $this->resolveSite(0, $targetLanguageId), $page, $targetLanguageId, $providerId, 'sys_file_metadata', (int)$metadata['uid'], 'Aktualisierung');
+        return ['created' => false, 'fields' => count($changed)];
+    }
+
+    /**
      * Einzelner Datensatz (z. B. ein Inhaltselement aus der Listenansicht).
      *
      * @throws TranslationException
@@ -188,8 +225,11 @@ final class TranslationService
             throw new TranslationException(sprintf('Datensatz %s:%d nicht gefunden.', $table, $uid), 1793130502);
         }
         $pageUid = (int)$row['pid'];
-        $page = BackendUtility::getRecord('pages', $pageUid) ?? ['uid' => $pageUid, 'title' => ''];
-        $site = $this->siteFinder->getSiteByPageId($pageUid);
+        $page = ($pageUid > 0 ? BackendUtility::getRecord('pages', $pageUid) : null) ?? ['uid' => $pageUid, 'title' => ''];
+        $site = $this->resolveSite($pageUid, $targetLanguageId);
+        if ($table === 'sys_file_metadata') {
+            $page = ['uid' => 0, 'title' => $this->getFileName((int)$row['file'])];
+        }
         $items = [];
         $this->collect($table, $row, $items);
         $commands = [$table => [$uid => [$mode->getDataHandlerCommand() => $targetLanguageId]]];
@@ -240,7 +280,9 @@ final class TranslationService
                     $this->settings->getList('doNotTranslate'),
                     $this->settings->getGlossary(),
                 ),
-                sprintf('Website „%s“, Seite „%s“', $site->getConfiguration()['websiteTitle'] ?? $site->getIdentifier(), (string)($page['title'] ?? '')),
+                (int)($page['uid'] ?? 0) > 0
+                    ? sprintf('Website „%s“, Seite „%s“', $site->getConfiguration()['websiteTitle'] ?? $site->getIdentifier(), (string)($page['title'] ?? ''))
+                    : sprintf('Website „%s“, %s', $site->getConfiguration()['websiteTitle'] ?? $site->getIdentifier(), (string)($page['title'] ?? '')),
             );
             try {
                 $result = $provider->translate($request);
@@ -359,7 +401,7 @@ final class TranslationService
             'table' => $table,
             'row' => $row,
             'fields' => $this->fieldResolver->getTranslatableFields($table, $row),
-            'hint' => $table === 'pages' ? 'Seiteneigenschaften' : $this->fieldResolver->getRecordTypeLabel($table, $row),
+            'hint' => $this->hint($table, $row),
         ];
         if ($depth > 3) {
             return;
@@ -413,6 +455,61 @@ final class TranslationService
             'status' => $status,
             'message' => $message,
         ]);
+    }
+
+    /**
+     * Site für den Sprachkontext: über die Seite, bei Dateien (ohne Seite) die erste Site mit dieser Sprache.
+     */
+    private function resolveSite(int $pageUid, int $languageId): Site
+    {
+        if ($pageUid > 0) {
+            try {
+                return $this->siteFinder->getSiteByPageId($pageUid);
+            } catch (SiteNotFoundException) {
+            }
+        }
+        foreach ($this->siteFinder->getAllSites() as $site) {
+            foreach ($site->getLanguages() as $language) {
+                if ($language->getLanguageId() === $languageId) {
+                    return $site;
+                }
+            }
+        }
+        throw new TranslationException(sprintf('Keine Website mit der Sprache %d gefunden.', $languageId), 1793130507);
+    }
+
+    /**
+     * Kontext für die KI: Art des Datensatzes (bei Dateien inkl. Dateiname).
+     *
+     * @param array<string, mixed> $row
+     */
+    private function hint(string $table, array $row): string
+    {
+        return match ($table) {
+            'pages' => 'Seiteneigenschaften',
+            'sys_file_metadata' => sprintf('Metadaten der Datei „%s“ (Alternativtext = Bildbeschreibung für Screenreader)', $this->getFileName((int)($row['file'] ?? 0))),
+            'sys_file_reference' => 'Bild/Datei-Verwendung (Alternativtext = Bildbeschreibung für Screenreader)',
+            default => $this->fieldResolver->getRecordTypeLabel($table, $row),
+        };
+    }
+
+    private function getFileName(int $fileUid): string
+    {
+        return 'Datei ' . (string)(BackendUtility::getRecord('sys_file', $fileUid, 'name')['name'] ?? $fileUid);
+    }
+
+    /**
+     * @param array<string, mixed> $row
+     * @param array<string, TranslatableField> $fields
+     */
+    private function hasText(array $row, array $fields): bool
+    {
+        foreach ($fields as $name => $field) {
+            if (trim(strip_tags((string)($row[$name] ?? ''))) !== '') {
+                return true;
+            }
+        }
+        return false;
     }
 
     private function segmentId(int $item, string $field, string $suffix): string

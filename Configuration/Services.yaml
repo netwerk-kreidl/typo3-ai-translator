@@ -28,3 +28,6 @@ services:
   Netwerk\AiTranslator\Queue\:
     resource: '../Classes/Queue/*'
     public: true
+
+  Netwerk\AiTranslator\Status\FileStatusService:
+    public: true

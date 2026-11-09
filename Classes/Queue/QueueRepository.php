@@ -24,16 +24,17 @@ final class QueueRepository
     public function __construct(private readonly ConnectionPool $connectionPool) {}
 
     /**
-     * Fügt Seiten hinzu; bereits offene Einträge derselben Seite und Sprache werden übersprungen.
+     * Fügt Seiten bzw. Dateien hinzu; bereits offene Einträge desselben Datensatzes und derselben Sprache werden übersprungen.
      *
-     * @param list<int> $pageUids
+     * @param list<int> $pageUids Seiten (tablename „pages“) bzw. Dateien („sys_file“)
      * @return int Anzahl neuer Einträge
      */
-    public function add(array $pageUids, int $languageId, string $provider, int $beUser): int
+    public function add(array $pageUids, int $languageId, string $provider, int $beUser, string $tablename = 'pages'): int
     {
         $open = [];
         $qb = $this->connectionPool->getQueryBuilderForTable(self::TABLE);
         foreach ($qb->select('page_uid')->from(self::TABLE)->where(
+            $qb->expr()->eq('tablename', $qb->createNamedParameter($tablename)),
             $qb->expr()->eq('language', $qb->createNamedParameter($languageId, Connection::PARAM_INT)),
             $qb->expr()->in('status', $qb->createNamedParameter([self::PENDING, self::RUNNING], Connection::PARAM_STR_ARRAY)),
         )->executeQuery()->fetchFirstColumn() as $uid) {
@@ -46,6 +47,7 @@ final class QueueRepository
                 continue;
             }
             $connection->insert(self::TABLE, [
+                'tablename' => $tablename,
                 'crdate' => time(),
                 'tstamp' => time(),
                 'be_user' => $beUser,
@@ -142,13 +144,14 @@ final class QueueRepository
     }
 
     /**
-     * @return array<int, string> Seiten-UID => Status der offenen Einträge einer Sprache
+     * @return array<int, string> Seiten- bzw. Datei-UID => Status der offenen Einträge einer Sprache
      */
-    public function getOpenPages(int $languageId): array
+    public function getOpenPages(int $languageId, string $tablename = 'pages'): array
     {
         $qb = $this->connectionPool->getQueryBuilderForTable(self::TABLE);
         $result = [];
         foreach ($qb->select('page_uid', 'status')->from(self::TABLE)->where(
+            $qb->expr()->eq('tablename', $qb->createNamedParameter($tablename)),
             $qb->expr()->eq('language', $qb->createNamedParameter($languageId, Connection::PARAM_INT)),
             $qb->expr()->in('status', $qb->createNamedParameter([self::PENDING, self::RUNNING], Connection::PARAM_STR_ARRAY)),
         )->executeQuery()->fetchAllAssociative() as $row) {

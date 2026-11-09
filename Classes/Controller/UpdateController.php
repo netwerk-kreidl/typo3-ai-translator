@@ -62,6 +62,42 @@ final readonly class UpdateController
     }
 
     /**
+     * Übersetzt die Metadaten einer Datei in eine oder alle Sprachen (aus der Dateiliste).
+     */
+    public function fileAction(ServerRequestInterface $request): ResponseInterface
+    {
+        $params = $request->getQueryParams();
+        $fileUid = (int)($params['file'] ?? 0);
+        $provider = (string)($params['provider'] ?? '');
+        $languageIds = array_filter(array_map(intval(...), (array)($params['languages'] ?? [])));
+        $returnUrl = GeneralUtility::sanitizeLocalUrl((string)($params['returnUrl'] ?? ''))
+            ?: (string)$this->uriBuilder->buildUriFromRoute('media_management');
+
+        if (!Permission::canTranslate() || $fileUid <= 0 || $languageIds === []) {
+            $this->flash('Keine Berechtigung für die KI-Übersetzung.', ContextualFeedbackSeverity::ERROR);
+            return new RedirectResponse($returnUrl);
+        }
+        $done = 0;
+        foreach ($languageIds as $languageId) {
+            if (!Permission::canEditLanguage($languageId)) {
+                continue;
+            }
+            try {
+                $result = $this->translationService->updateFileMetadata($fileUid, $languageId, $provider);
+                $done += $result['created'] || $result['fields'] > 0 ? 1 : 0;
+            } catch (TranslationException $e) {
+                $this->flash($e->getMessage(), ContextualFeedbackSeverity::ERROR);
+                return new RedirectResponse($returnUrl);
+            }
+        }
+        $this->flash(
+            $done > 0 ? 'Die Metadaten wurden übersetzt. Bitte den Alternativtext kontrollieren.' : 'Die Übersetzung der Metadaten war bereits aktuell.',
+            ContextualFeedbackSeverity::OK
+        );
+        return new RedirectResponse($returnUrl);
+    }
+
+    /**
      * Verarbeitet den nächsten Eintrag der Warteschlange und meldet den Stand zurück.
      */
     public function processQueueAction(ServerRequestInterface $request): ResponseInterface

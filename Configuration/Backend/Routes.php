@@ -10,4 +10,9 @@ return [
         'target' => UpdateController::class . '::updateAction',
         'methods' => ['POST'],
     ],
+    // Datei-Metadaten aus der Dateiliste übersetzen/aktualisieren (Link im Aktionsmenü)
+    'ai_translator_file' => [
+        'path' => '/ai-translator/file',
+        'target' => UpdateController::class . '::fileAction',
+    ],
 ];

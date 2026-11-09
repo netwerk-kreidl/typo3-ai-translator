@@ -44,10 +44,12 @@ CREATE TABLE tx_aitranslator_state (
 );
 
 #
-# Warteschlange für Massenübersetzungen (je Eintrag eine Seite in einer Sprache)
+# Warteschlange für Massenübersetzungen (je Eintrag eine Seite oder Datei in einer Sprache)
+#   tablename „pages“: page_uid = Seite, „sys_file“: page_uid = Datei (Metadaten)
 #
 CREATE TABLE tx_aitranslator_queue (
     uid int(11) unsigned NOT NULL auto_increment,
+    tablename varchar(30) DEFAULT 'pages' NOT NULL,
     crdate int(11) unsigned DEFAULT '0' NOT NULL,
     tstamp int(11) unsigned DEFAULT '0' NOT NULL,
     be_user int(11) unsigned DEFAULT '0' NOT NULL,

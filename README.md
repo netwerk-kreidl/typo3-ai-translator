@@ -11,6 +11,7 @@
   - *Übersicht & Massenübersetzung*: Übersetzungsstand aller Seiten je Sprache (nicht übersetzt / veraltet / unvollständig / aktuell), Auswahl mehrerer Seiten, Abarbeitung über eine Warteschlange mit Fortschrittsanzeige oder per Cronjob
   - *Anbieter & Protokoll*: Status der Anbieter, Verbindungstest, Verbrauch der letzten 30 Tage, Protokoll aller Übersetzungen
 - Übersetzt auch eigenständige Datensätze in Ordnern (z. B. Blog-Kategorien und Schlagwörter)
+- **Datei-Metadaten** (Titel, Alternativtext, Beschreibung): im Übersetzen-Dialog der Dateiliste, per Aktion je Datei (veraltete Übersetzungen werden in der Dateiliste hervorgehoben) und als Massenübersetzung im Modul-Reiter *Dateien (Metadaten)*
 
 Nicht übersetzt werden Felder mit `l10n_mode = exclude`, schreibgeschützte Felder, Code-/HTML-Editoren, JSON-Felder, Zahlen-/Datums-/E-Mail-Felder, Autorennamen und Social-Media-Handles, technische Verknüpfungsfelder sowie alles, was in der Konfiguration unter „Ausgeschlossene Felder“ steht. Bei Bildreferenzen werden nur Titel, Alternativtext, Beschreibung und Link übersetzt.
 
@@ -148,6 +149,16 @@ Ein Feld gilt als veraltet, wenn sich der Ausgangstext seit der Übersetzung ge�
 
 Beim Aktualisieren wird die URL (Slug) bestehender Übersetzungen **nicht** verändert, damit keine Links brechen. Soll sie zum neuen Titel passen, in den Seiteneigenschaften der Übersetzung neu erzeugen (TYPO3 legt dabei eine Weiterleitung an).
 
+### Datei-Metadaten
+
+Titel, Alternativtext und Beschreibung einer Datei gelten überall, wo die Datei verwendet wird (sofern am Inhaltselement nichts Eigenes eingetragen ist). Übersetzen:
+
+- **Dateiliste → Übersetzungen → Sprache**: Im Übersetzen-Dialog „KI-Übersetzung mit …“ wählen (für noch nicht übersetzte Metadaten).
+- **Dateiliste (Listenansicht)**: Ist die Übersetzung veraltet, erscheint bei der Datei eine Schaltfläche mit Warnsymbol („… aktualisieren“); fehlt sie, steht „Metadaten mit … übersetzen“ im Aktionsmenü. In der Kachelansicht zeigt TYPO3 keine Datei-Aktionen.
+- **Modul → Dateien (Metadaten)**: Ordner und Sprache wählen, Dateien anhaken, über die Warteschlange übersetzen. Daneben stehen der deutsche und der übersetzte Text zum Gegenlesen.
+
+Dateien ohne deutsche Texte werden übersprungen. Redakteure brauchen zusätzlich Schreibrechte auf die Tabelle „Metadaten“ (`sys_file_metadata`) und die Dateifreigabe.
+
 ### Massenübersetzung
 
 Modul **Inhalt → KI-Übersetzung → Übersicht & Massenübersetzung**: Sprache wählen, Seiten mit Handlungsbedarf anhaken, Anbieter wählen, „In Warteschlange stellen & starten“.
@@ -167,7 +178,7 @@ Für Tests ohne API-Key gibt es im Kontext **Development** zusätzlich den Anbie
 ## Roadmap
 
 - **1.1** ✓ Hinweis auf veraltete Übersetzungen, Übersicht pro Sprache, Nachübersetzen geänderter Felder, Massenübersetzung
-- **1.2** – Dateimetadaten (Titel, Alternativtext, Beschreibung) in der Dateiliste übersetzen
+- **1.2** ✓ Datei-Metadaten (Titel, Alternativtext, Beschreibung) übersetzen
 
 ## Lizenz
 

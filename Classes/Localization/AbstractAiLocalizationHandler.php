@@ -62,7 +62,7 @@ abstract class AbstractAiLocalizationHandler implements LocalizationHandlerInter
         if (!$this->providers->has($this->getProviderIdentifier()) || !$this->providers->get($this->getProviderIdentifier())->isConfigured()) {
             return false;
         }
-        return in_array($instructions->mainRecordType, ['pages', 'tt_content'], true) && $instructions->targetLanguageId > 0;
+        return in_array($instructions->mainRecordType, ['pages', 'tt_content', 'sys_file_metadata'], true) && $instructions->targetLanguageId > 0;
     }
 
     public function processLocalization(LocalizationInstructions $instructions): LocalizationResult

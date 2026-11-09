@@ -44,7 +44,16 @@
                 <span class="badge badge-success">{summary.current}</span> aktuell
             </p>
 
-            <f:render section="Queue" arguments="{_all}" />
+            <f:if condition="!{canTranslate}">
+                <f:be.infobox title="Massenübersetzung nicht verfügbar" state="1">
+                    <f:if condition="{providers}">
+                        <f:then>Dir fehlt die Berechtigung „KI-Übersetzung verwenden“ (Benutzergruppe → Zugriffsrechte → Benutzerdefinierte Optionen).</f:then>
+                        <f:else>Es ist noch kein Anbieter eingerichtet. Bitte einen API-Key hinterlegen (siehe Reiter „Anbieter &amp; Protokoll“ bzw. README) – danach lassen sich hier Seiten auswählen.</f:else>
+                    </f:if>
+                </f:be.infobox>
+            </f:if>
+
+            <f:render partial="Queue" arguments="{_all}" />
 
             <form method="post" action="{enqueueUrl}" id="ait-enqueue">
                 <input type="hidden" name="site" value="{site.identifier}" />
@@ -56,7 +65,9 @@
                             <tr>
                                 <th class="col-checkbox">
                                     <f:if condition="{canTranslate}">
-                                        <input type="checkbox" class="form-check-input" data-ait-toggle-all aria-label="Alle sichtbaren Seiten mit Handlungsbedarf auswählen" />
+                                        <span class="form-check form-check-type-toggle">
+                                            <input type="checkbox" class="form-check-input" data-ait-toggle-all aria-label="Alle sichtbaren Seiten mit Handlungsbedarf auswählen" />
+                                        </span>
                                     </f:if>
                                 </th>
                                 <th>Seite</th>
@@ -70,7 +81,9 @@
                                     <tr>
                                         <td class="col-checkbox">
                                             <f:if condition="{canTranslate} && {page.state} != 'current' && !{page.queued}">
-                                                <input type="checkbox" class="form-check-input" name="pages[]" value="{page.uid}" id="ait-page-{page.uid}" data-ait-page />
+                                                <span class="form-check form-check-type-toggle">
+                                                    <input type="checkbox" class="form-check-input" name="pages[]" value="{page.uid}" id="ait-page-{page.uid}" data-ait-page />
+                                                </span>
                                             </f:if>
                                         </td>
                                         <td>
@@ -133,67 +146,5 @@
     </f:if>
 </f:section>
 
-<f:section name="Queue">
-    <div class="card mb-4" data-ait-queue
-         data-autostart="{f:if(condition: autostart, then: '1', else: '0')}"
-         data-reload-url="{selfUrl}"
-         data-open="{queueOpen}">
-        <div class="card-body">
-            <div class="d-flex flex-wrap gap-2 align-items-center justify-content-between">
-                <h2 class="h4 mb-0">Warteschlange</h2>
-                <div class="d-flex flex-wrap gap-2">
-                    <f:if condition="{canTranslate} && {queueOpen}">
-                        <button type="button" class="btn btn-primary btn-sm" data-ait-start>Abarbeiten</button>
-                        <button type="button" class="btn btn-default btn-sm" data-ait-stop hidden>Anhalten</button>
-                        <form method="post" action="{queueUrl}">
-                            <input type="hidden" name="action" value="cancel" />
-                            <input type="hidden" name="returnUrl" value="{selfUrl}" />
-                            <button type="submit" class="btn btn-default btn-sm">Offene abbrechen</button>
-                        </form>
-                    </f:if>
-                    <f:if condition="{queueCounts.done} || {queueCounts.error}">
-                        <form method="post" action="{queueUrl}">
-                            <input type="hidden" name="action" value="clear" />
-                            <input type="hidden" name="returnUrl" value="{selfUrl}" />
-                            <button type="submit" class="btn btn-default btn-sm">Erledigte entfernen</button>
-                        </form>
-                    </f:if>
-                </div>
-            </div>
-            <p class="mb-2 mt-2" data-ait-counts>
-                {queueCounts.pending} offen · {queueCounts.running} in Arbeit · {queueCounts.done} erledigt · {queueCounts.error} Fehler
-            </p>
-            <div class="progress mb-2" data-ait-progress hidden><div class="progress-bar" role="progressbar" style="width: 0%"></div></div>
-            <ul class="list-unstyled small mb-0" data-ait-log aria-live="polite"></ul>
-            <f:if condition="{queueRecent}">
-                <details class="mt-2">
-                    <summary class="small">Letzte Einträge</summary>
-                    <table class="table table-sm small mb-0 mt-2">
-                        <f:for each="{queueRecent}" as="entry">
-                            <tr>
-                                <td><f:format.date format="d.m.Y H:i">@{entry.tstamp}</f:format.date></td>
-                                <td>{entry.pageTitle} [{entry.page_uid}]</td>
-                                <td>{entry.languageTitle}</td>
-                                <td>{entry.provider}</td>
-                                <td>
-                                    <f:switch expression="{entry.status}">
-                                        <f:case value="done"><span class="badge badge-success">erledigt</span></f:case>
-                                        <f:case value="error"><span class="badge badge-danger">Fehler</span></f:case>
-                                        <f:case value="running"><span class="badge badge-info">in Arbeit</span></f:case>
-                                        <f:defaultCase><span class="badge badge-default">offen</span></f:defaultCase>
-                                    </f:switch>
-                                </td>
-                                <td>{entry.message}</td>
-                            </tr>
-                        </f:for>
-                    </table>
-                </details>
-            </f:if>
-            <p class="small text-body-secondary mb-0 mt-2">
-                Die Warteschlange wird abgearbeitet, solange diese Seite geöffnet ist. Alternativ per Cronjob:
-                <code>vendor/bin/typo3 ai-translator:queue:process --time-limit=240</code>
-            </p>
-        </div>
-    </div>
-</f:section>
+
 </html>
