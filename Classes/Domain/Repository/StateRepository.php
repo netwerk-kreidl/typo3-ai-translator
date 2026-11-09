@@ -37,4 +37,21 @@ final class StateRepository
             'tstamp' => time(),
         ]);
     }
+
+    /**
+     * @return array<string, array<string, mixed>> Feldname => Zustand
+     */
+    public function findByTranslation(string $table, int $translationUid): array
+    {
+        $qb = $this->connectionPool->getQueryBuilderForTable(self::TABLE);
+        $rows = $qb->select('*')->from(self::TABLE)->where(
+            $qb->expr()->eq('tablename', $qb->createNamedParameter($table)),
+            $qb->expr()->eq('translation_uid', $qb->createNamedParameter($translationUid, \TYPO3\CMS\Core\Database\Connection::PARAM_INT)),
+        )->executeQuery()->fetchAllAssociative();
+        $result = [];
+        foreach ($rows as $row) {
+            $result[(string)$row['field']] = $row;
+        }
+        return $result;
+    }
 }

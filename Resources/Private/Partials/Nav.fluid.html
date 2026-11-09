@@ -1,0 +1,10 @@
+<html xmlns:f="http://typo3.org/ns/TYPO3/CMS/Fluid/ViewHelpers" data-namespace-typo3-fluid="true">
+<h1>KI-Übersetzung</h1>
+<ul class="nav nav-tabs mb-4" role="tablist">
+    <f:for each="{nav}" as="item">
+        <li class="nav-item">
+            <a class="nav-link{f:if(condition: item.active, then: ' active')}" href="{item.url}"{f:if(condition: item.active, then: ' aria-current="page"')}>{item.label}</a>
+        </li>
+    </f:for>
+</ul>
+</html>

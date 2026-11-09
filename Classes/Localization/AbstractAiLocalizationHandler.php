@@ -6,6 +6,7 @@ namespace Netwerk\AiTranslator\Localization;
 
 use Netwerk\AiTranslator\Provider\ProviderRegistry;
 use Netwerk\AiTranslator\Provider\TranslationException;
+use Netwerk\AiTranslator\Security\Permission;
 use Netwerk\AiTranslator\Service\TranslationService;
 use TYPO3\CMS\Backend\Localization\Finisher\RedirectLocalizationFinisher;
 use TYPO3\CMS\Backend\Localization\Finisher\ReloadLocalizationFinisher;
@@ -13,7 +14,6 @@ use TYPO3\CMS\Backend\Localization\LocalizationHandlerInterface;
 use TYPO3\CMS\Backend\Localization\LocalizationInstructions;
 use TYPO3\CMS\Backend\Localization\LocalizationResult;
 use TYPO3\CMS\Backend\Routing\UriBuilder;
-use TYPO3\CMS\Core\Authentication\BackendUserAuthentication;
 
 /**
  * Zusätzliche Option im TYPO3-Übersetzen-Dialog („KI-Übersetzung mit …“), je Anbieter eine.
@@ -21,7 +21,7 @@ use TYPO3\CMS\Core\Authentication\BackendUserAuthentication;
  */
 abstract class AbstractAiLocalizationHandler implements LocalizationHandlerInterface
 {
-    public const PERMISSION = 'tx_aitranslator:translate';
+    public const PERMISSION = Permission::CUSTOM_OPTION;
 
     public function __construct(
         protected readonly ProviderRegistry $providers,
@@ -56,8 +56,7 @@ abstract class AbstractAiLocalizationHandler implements LocalizationHandlerInter
 
     public function isAvailable(LocalizationInstructions $instructions): bool
     {
-        $user = $this->getBackendUser();
-        if ($user === null || (!$user->isAdmin() && !$user->check('custom_options', self::PERMISSION))) {
+        if (!Permission::canTranslate()) {
             return false;
         }
         if (!$this->providers->has($this->getProviderIdentifier()) || !$this->providers->get($this->getProviderIdentifier())->isConfigured()) {
@@ -96,11 +95,6 @@ abstract class AbstractAiLocalizationHandler implements LocalizationHandlerInter
         } catch (TranslationException $e) {
             return LocalizationResult::error([$e->getMessage()]);
         }
-    }
-
-    private function getBackendUser(): ?BackendUserAuthentication
-    {
-        return $GLOBALS['BE_USER'] ?? null;
     }
 
     private function sL(string $key): string

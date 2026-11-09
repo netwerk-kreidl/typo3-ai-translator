@@ -1,0 +1,40 @@
+<html xmlns:f="http://typo3.org/ns/TYPO3/CMS/Fluid/ViewHelpers" xmlns:core="http://typo3.org/ns/TYPO3/CMS/Core/ViewHelpers" data-namespace-typo3-fluid="true">
+<div class="callout callout-warning mb-3">
+    <div class="callout-icon"><span class="icon-emphasized"><core:icon identifier="actions-exclamation" /></span></div>
+    <div class="callout-content">
+        <div class="callout-title">Übersetzung nicht mehr aktuell</div>
+        <div class="callout-body">
+            <p>Seit der Übersetzung wurde der deutsche Text dieser Seite geändert oder ergänzt.</p>
+            <f:for each="{languages}" as="language">
+                <div class="mb-3">
+                    <strong><core:icon identifier="{language.flag}" /> {language.title}</strong>
+                    <ul class="mb-2">
+                        <f:for each="{language.outdated}" as="record">
+                            <li>
+                                {record.label}<f:if condition="{record.fields}">: <f:for each="{record.fields}" as="label" iteration="i">{label}<f:if condition="{i.isLast}"><f:else>, </f:else></f:if></f:for></f:if>
+                                <f:for each="{record.newChildren}" as="children"> – {children.uids -> f:count()} neue Unterelemente</f:for>
+                            </li>
+                        </f:for>
+                        <f:if condition="{language.missing}">
+                            <li>Noch nicht übersetzt: <f:for each="{language.missing}" as="missing" iteration="i">{missing.label}<f:if condition="{i.isLast}"><f:else>; </f:else></f:if></f:for></li>
+                        </f:if>
+                    </ul>
+                    <f:if condition="{canTranslate}">
+                        <form method="post" action="{updateUrl}" class="d-flex flex-wrap gap-2 align-items-center">
+                            <input type="hidden" name="page" value="{pageUid}" />
+                            <input type="hidden" name="language" value="{language.id}" />
+                            <input type="hidden" name="returnUrl" value="{returnUrl}" />
+                            <f:for each="{providers}" as="label" key="provider">
+                                <button type="submit" name="provider" value="{provider}" class="btn btn-default btn-sm">
+                                    <core:icon identifier="ai-translator-handler" size="small" /> Mit {label} aktualisieren
+                                </button>
+                            </f:for>
+                            <span class="small text-body-secondary">Übersetzt nur Geändertes und Fehlendes neu – von Hand angepasste, unveränderte Texte bleiben erhalten.</span>
+                        </form>
+                    </f:if>
+                </div>
+            </f:for>
+        </div>
+    </div>
+</div>
+</html>

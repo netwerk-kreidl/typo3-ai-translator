@@ -22,7 +22,22 @@ final class FieldResolver
         '*.rowDescription', '*.l10n_diffsource', '*.l18n_diffsource', '*.t3_origuid',
         'pages.TSconfig', 'pages.tsconfig_includes', 'pages.backend_layout', 'pages.backend_layout_next_level',
         'pages.url', 'pages.target', 'pages.canonical_link', 'pages.slug', 'sys_file_reference.crop',
+        // Namen, Handles und Code
+        '*.author', '*.author_email', 'pages.tx_csseo_tw_creator', 'pages.tx_csseo_tw_site', 'pages.tx_csseo_json_ld',
     ];
+
+    /**
+     * Felder, die bei bestimmten Tabellen ausschließlich übersetzt werden. Bei Dateireferenzen hängt der
+     * Formular-Typ von der Datei ab und lässt sich am Datensatz allein nicht bestimmen – ohne diese Liste
+     * würden technische Felder wie „tablenames“ oder „fieldname“ mitübersetzt.
+     */
+    private const ONLY_FIELDS = [
+        'sys_file_reference' => ['title', 'alternative', 'description', 'link'],
+        'sys_file_metadata' => ['title', 'alternative', 'description', 'caption', 'copyright'],
+    ];
+
+    /** Technische Verknüpfungsfelder von Inline-Kindern */
+    private const RELATION_FIELDS = ['tablenames', 'fieldname', 'table_local', 'uid_local', 'uid_foreign', 'foreign_table_parent_uid', 'parenttable', 'parentid', 'parentfield'];
 
     /** Inline-Kinder, die mitübersetzt werden (Typ inline/file) */
     private const CHILD_TYPES = ['inline', 'file'];
@@ -46,9 +61,11 @@ final class FieldResolver
         $excluded = array_merge(self::ALWAYS_EXCLUDED, $this->settings->getList('excludeFields'));
         $languageService = $GLOBALS['LANG'] ?? $this->languageServiceFactory->create('de');
         $result = [];
+        $only = self::ONLY_FIELDS[$table] ?? null;
         foreach ($this->visibleFieldsCollector->getFields($table, $row) as $field) {
             $name = $field->getName();
-            if ($this->isExcluded($table, $name, $excluded) || $field->getTranslationBehaviour() === FieldTranslationBehaviour::Excluded) {
+            if (($only !== null && !in_array($name, $only, true)) || in_array($name, self::RELATION_FIELDS, true) || str_contains($name, 'json')
+                || $this->isExcluded($table, $name, $excluded) || $field->getTranslationBehaviour() === FieldTranslationBehaviour::Excluded) {
                 continue;
             }
             $config = $field->getConfiguration();

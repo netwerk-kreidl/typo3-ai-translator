@@ -14,16 +14,13 @@ use Netwerk\AiTranslator\Provider\TranslationException;
 use Netwerk\AiTranslator\Provider\TranslationRequest;
 use Netwerk\AiTranslator\Provider\TranslationResult;
 use Netwerk\AiTranslator\Provider\TranslationStyle;
+use Netwerk\AiTranslator\Status\StatusService;
 use TYPO3\CMS\Backend\Localization\LocalizationMode;
 use TYPO3\CMS\Backend\Utility\BackendUtility;
-use TYPO3\CMS\Core\Database\Connection;
 use TYPO3\CMS\Core\Database\ConnectionPool;
-use TYPO3\CMS\Core\Database\Query\Restriction\DeletedRestriction;
 use TYPO3\CMS\Core\DataHandling\DataHandler;
 use TYPO3\CMS\Core\DataHandling\Model\RecordStateFactory;
 use TYPO3\CMS\Core\DataHandling\SlugHelper;
-use TYPO3\CMS\Core\Schema\Capability\TcaSchemaCapability;
-use TYPO3\CMS\Core\Schema\TcaSchemaFactory;
 use TYPO3\CMS\Core\Site\Entity\Site;
 use TYPO3\CMS\Core\Site\SiteFinder;
 use TYPO3\CMS\Core\Utility\GeneralUtility;
@@ -43,48 +40,140 @@ final class TranslationService
         private readonly SegmentCodec $codec,
         private readonly ExtensionSettings $settings,
         private readonly SiteFinder $siteFinder,
-        private readonly TcaSchemaFactory $tcaSchemaFactory,
+        private readonly RecordFinder $finder,
+        private readonly StatusService $statusService,
         private readonly ConnectionPool $connectionPool,
         private readonly LogRepository $logRepository,
         private readonly StateRepository $stateRepository,
     ) {}
 
     /**
+     * Legt die Seitenübersetzung an (falls nötig) und übersetzt die gewählten Inhaltselemente.
+     *
      * @param list<int> $contentUids Inhaltselemente (tt_content), die mitübersetzt werden
      * @return array{createdPage: bool, records: int}
      * @throws TranslationException
      */
     public function translatePage(int $pageUid, int $targetLanguageId, array $contentUids, string $providerId, LocalizationMode $mode): array
     {
+        return $this->translatePageRecords($pageUid, $targetLanguageId, ['tt_content' => $contentUids], $providerId, $mode);
+    }
+
+    /**
+     * Bringt die Übersetzung einer Seite auf den aktuellen Stand: legt sie samt allen Inhalten an, falls sie fehlt,
+     * übersetzt sonst nur geänderte Felder neu und ergänzt neue Unterelemente und noch nicht übersetzte Inhalte.
+     * Die URL (Slug) bestehender Übersetzungen bleibt unverändert.
+     *
+     * @return array{createdPage: bool, records: int, fields: int}
+     * @throws TranslationException
+     */
+    public function updatePage(int $pageUid, int $targetLanguageId, string $providerId): array
+    {
+        $status = $this->statusService->getPageStatus($pageUid, $targetLanguageId, true);
+        $page = BackendUtility::getRecord('pages', $pageUid);
+        if ($page === null) {
+            throw new TranslationException(sprintf('Seite %d nicht gefunden.', $pageUid), 1793130506);
+        }
+        $freeMode = $this->finder->usesFreeMode($pageUid, $targetLanguageId);
+        $missing = [];
+        foreach ($status->missing as $record) {
+            $missing[$record['table']][] = $record['uid'];
+        }
+        if (!$status->isFolder && $status->pageTranslationUid === null) {
+            $result = $this->translatePageRecords($pageUid, $targetLanguageId, $missing, $providerId, LocalizationMode::TRANSLATE);
+            return $result + ['fields' => 0];
+        }
+
+        $items = [];
+        $commands = [];
+        $fields = 0;
+        foreach ($status->outdated as $outdated) {
+            $row = BackendUtility::getRecord($outdated->table, $outdated->sourceUid);
+            if ($row === null) {
+                continue;
+            }
+            if ($outdated->fields !== []) {
+                $all = $this->fieldResolver->getTranslatableFields($outdated->table, $row);
+                $items[] = [
+                    'table' => $outdated->table,
+                    'row' => $row,
+                    'fields' => array_intersect_key($all, $outdated->fields),
+                    'hint' => $outdated->table === 'pages' ? 'Seiteneigenschaften' : $this->fieldResolver->getRecordTypeLabel($outdated->table, $row),
+                    'translationUid' => $outdated->translationUid,
+                ];
+                $fields += count($outdated->fields);
+            }
+            foreach ($outdated->newChildren as $field => $children) {
+                $commands[$outdated->table][$outdated->translationUid]['inlineLocalizeSynchronize'] = [
+                    'field' => $field,
+                    'language' => $targetLanguageId,
+                    'ids' => $children['uids'],
+                ];
+                foreach ($children['uids'] as $childUid) {
+                    $child = BackendUtility::getRecord($children['table'], $childUid);
+                    if ($child !== null) {
+                        $this->collect($children['table'], $child, $items);
+                    }
+                }
+            }
+        }
+        foreach ($missing as $table => $uids) {
+            foreach ($uids as $uid) {
+                $row = BackendUtility::getRecord($table, $uid);
+                if ($row === null) {
+                    continue;
+                }
+                $this->collect($table, $row, $items);
+                $command = $table === 'tt_content' && $freeMode ? 'copyToLanguage' : 'localize';
+                $commands[$table][$uid] = [$command => $targetLanguageId];
+            }
+        }
+        if ($items === [] && $commands === []) {
+            return ['createdPage' => false, 'records' => 0, 'fields' => 0];
+        }
+        $site = $this->siteFinder->getSiteByPageId($pageUid);
+        $records = $this->run($items, $commands, $site, $page, $targetLanguageId, $providerId, 'pages', $pageUid, 'Aktualisierung');
+        return ['createdPage' => false, 'records' => $records, 'fields' => $fields];
+    }
+
+    /**
+     * @param array<string, list<int>> $recordUids Tabelle => UIDs der Ausgangsdatensätze auf der Seite
+     * @return array{createdPage: bool, records: int}
+     * @throws TranslationException
+     */
+    private function translatePageRecords(int $pageUid, int $targetLanguageId, array $recordUids, string $providerId, LocalizationMode $mode): array
+    {
         $page = BackendUtility::getRecord('pages', $pageUid);
         if ($page === null) {
             throw new TranslationException(sprintf('Seite %d nicht gefunden.', $pageUid), 1793130501);
         }
         $site = $this->siteFinder->getSiteByPageId($pageUid);
-        $pageTranslationExists = $this->findPageTranslation($pageUid, $targetLanguageId) !== null;
+        $isFolder = (int)$page['doktype'] === RecordFinder::DOKTYPE_FOLDER;
+        $createPage = !$isFolder && $this->finder->findPageTranslation($pageUid, $targetLanguageId) === null;
 
         $items = [];
-        if (!$pageTranslationExists) {
-            $this->collect('pages', $page, $items);
-        }
-        foreach ($contentUids as $contentUid) {
-            $row = BackendUtility::getRecord('tt_content', $contentUid);
-            if ($row !== null) {
-                $this->collect('tt_content', $row, $items);
-            }
-        }
-
         $commands = [];
-        if (!$pageTranslationExists) {
+        if ($createPage) {
+            $this->collect('pages', $page, $items);
             // Seiten werden immer als verbundene Übersetzung angelegt (wie im TYPO3-Standard)
             $commands['pages'][$pageUid] = ['localize' => $targetLanguageId];
         }
-        foreach ($contentUids as $contentUid) {
-            $commands['tt_content'][$contentUid] = [$mode->getDataHandlerCommand() => $targetLanguageId];
+        foreach ($recordUids as $table => $uids) {
+            foreach ($uids as $uid) {
+                $row = BackendUtility::getRecord($table, (int)$uid);
+                if ($row === null) {
+                    continue;
+                }
+                $this->collect($table, $row, $items);
+                $command = $table === 'tt_content' ? $mode->getDataHandlerCommand() : 'localize';
+                $commands[$table][(int)$uid] = [$command => $targetLanguageId];
+            }
         }
-
+        if ($commands === []) {
+            return ['createdPage' => false, 'records' => 0];
+        }
         $records = $this->run($items, $commands, $site, $page, $targetLanguageId, $providerId, 'pages', $pageUid);
-        return ['createdPage' => !$pageTranslationExists, 'records' => $records];
+        return ['createdPage' => $createPage, 'records' => $records];
     }
 
     /**
@@ -105,15 +194,16 @@ final class TranslationService
         $this->collect($table, $row, $items);
         $commands = [$table => [$uid => [$mode->getDataHandlerCommand() => $targetLanguageId]]];
         $this->run($items, $commands, $site, $page, $targetLanguageId, $providerId, $table, $uid);
-        return $this->findTranslationUid($table, $uid, $targetLanguageId, []) ?? 0;
+        return $this->finder->findTranslationUid($table, $uid, $targetLanguageId) ?? 0;
     }
 
     /**
-     * @param list<array{table: string, row: array<string, mixed>, fields: array<string, TranslatableField>, hint: string}> $items
-     * @param array<string, array<int, array<string, int>>> $commands
+     * @param list<array{table: string, row: array<string, mixed>, fields: array<string, TranslatableField>, hint: string, translationUid?: int}> $items
+     *        translationUid: bestehende Übersetzung, deren Felder überschrieben werden (sonst wird sie per Befehl angelegt)
+     * @param array<string, array<int, array<string, mixed>>> $commands
      * @param array<string, mixed> $page
      */
-    private function run(array $items, array $commands, Site $site, array $page, int $targetLanguageId, string $providerId, string $logTable, int $logUid): int
+    private function run(array $items, array $commands, Site $site, array $page, int $targetLanguageId, string $providerId, string $logTable, int $logUid, string $logMessage = ''): int
     {
         @set_time_limit(600);
         $provider = $this->providers->get($providerId);
@@ -155,19 +245,46 @@ final class TranslationService
             try {
                 $result = $provider->translate($request);
             } catch (TranslationException $e) {
-                $this->log($page, $logTable, $logUid, $targetLanguageId, $providerId, '', count($items), count($segments), 0, 0, 0, 'error', $e->getMessage());
+                $this->log($page, $logTable, $logUid, $targetLanguageId, $providerId, '', count($items), count($segments), 0, 0, 0, 'error', trim($logMessage . ': ' . $e->getMessage(), ': '));
                 throw $e;
             }
         }
 
         // 3. Übersetzungen anlegen
-        $dataHandler = GeneralUtility::makeInstance(DataHandler::class);
-        $dataHandler->start([], $commands);
-        $dataHandler->process_cmdmap();
-        if ($dataHandler->errorLog !== []) {
-            throw new TranslationException(implode("\n", $dataHandler->errorLog), 1793130504);
+        $copyMapping = [];
+        if ($commands !== []) {
+            $dataHandler = GeneralUtility::makeInstance(DataHandler::class);
+            $dataHandler->start([], $commands);
+            $dataHandler->process_cmdmap();
+            if ($dataHandler->errorLog !== []) {
+                throw new TranslationException(implode("\n", $dataHandler->errorLog), 1793130504);
+            }
+            $copyMapping = $dataHandler->copyMappingArray_merged;
+
+            // Bilder/Unterelemente der Seiteneigenschaften übernimmt TYPO3 beim Anlegen der Seitenübersetzung nicht –
+            // daher nachträglich lokalisieren (z. B. Vorschaubild einer Zimmerseite)
+            $pageCommands = [];
+            foreach ($commands['pages'] ?? [] as $pageUid => $pageCommand) {
+                if (!isset($pageCommand['localize'])) {
+                    continue;
+                }
+                $pageRow = BackendUtility::getRecord('pages', (int)$pageUid);
+                foreach ($pageRow !== null ? $this->fieldResolver->getChildRelations('pages', $pageRow) : [] as $relation) {
+                    if ($this->finder->findChildren($relation, (int)$pageUid) !== []) {
+                        $pageCommands[] = ['pages' => [(int)$pageUid => ['inlineLocalizeSynchronize' => [
+                            'field' => $relation['field'],
+                            'language' => $targetLanguageId,
+                            'action' => 'localize',
+                        ]]]];
+                    }
+                }
+            }
+            foreach ($pageCommands as $pageCommand) {
+                $dataHandler = GeneralUtility::makeInstance(DataHandler::class);
+                $dataHandler->start([], $pageCommand);
+                $dataHandler->process_cmdmap();
+            }
         }
-        $copyMapping = $dataHandler->copyMappingArray_merged;
 
         // 4. Texte eintragen
         $datamap = [];
@@ -176,14 +293,22 @@ final class TranslationService
         foreach ($items as $i => $item) {
             $table = $item['table'];
             $sourceUid = (int)$item['row']['uid'];
-            $translationUid = $table === 'pages'
-                ? $this->findPageTranslation($sourceUid, $targetLanguageId)
-                : $this->findTranslationUid($table, $sourceUid, $targetLanguageId, $copyMapping);
+            $isExisting = isset($item['translationUid']);
+            $translationUid = $item['translationUid'] ?? $this->finder->findTranslationUid($table, $sourceUid, $targetLanguageId, $copyMapping);
             if ($translationUid === null) {
                 continue;
             }
-            if ($table === 'pages') {
+            if ($table === 'pages' && !$isExisting) {
                 $newPageTranslationUid = $translationUid;
+            }
+            if ($isExisting) {
+                // Im Ausgangstext geleerte Felder auch in der Übersetzung leeren
+                foreach ($item['fields'] as $fieldName => $field) {
+                    if (!isset($templates[$i][$fieldName]) && trim((string)($item['row'][$fieldName] ?? '')) === '') {
+                        $datamap[$table][$translationUid][$fieldName] = '';
+                        $state[] = [$table, $translationUid, $sourceUid, $fieldName, '', ''];
+                    }
+                }
             }
             foreach ($templates[$i] ?? [] as $fieldName => $template) {
                 $parts = [];
@@ -218,7 +343,7 @@ final class TranslationService
         foreach ($state as [$table, $translationUid, $sourceUid, $field, $sourceValue, $value]) {
             $this->stateRepository->save($table, $translationUid, $sourceUid, (int)$page['uid'], $targetLanguageId, $field, $sourceValue, $value, $providerId);
         }
-        $this->log($page, $logTable, $logUid, $targetLanguageId, $providerId, $result->model, count($items), count($segments), $result->characters, $result->inputTokens, $result->outputTokens, 'success', '');
+        $this->log($page, $logTable, $logUid, $targetLanguageId, $providerId, $result->model, count($items), count($segments), $result->characters, $result->inputTokens, $result->outputTokens, 'success', $logMessage);
         return count($items);
     }
 
@@ -240,72 +365,10 @@ final class TranslationService
             return;
         }
         foreach ($this->fieldResolver->getChildRelations($table, $row) as $relation) {
-            foreach ($this->findChildren($relation, (int)$row['uid']) as $child) {
+            foreach ($this->finder->findChildren($relation, (int)$row['uid']) as $child) {
                 $this->collect($relation['table'], $child, $items, $depth + 1);
             }
         }
-    }
-
-    /**
-     * @param array{field: string, table: string, foreignField: string, matchFields: array<string, string>} $relation
-     * @return list<array<string, mixed>>
-     */
-    private function findChildren(array $relation, int $parentUid): array
-    {
-        $schema = $this->tcaSchemaFactory->get($relation['table']);
-        $qb = $this->connectionPool->getQueryBuilderForTable($relation['table']);
-        $qb->getRestrictions()->removeAll()->add(GeneralUtility::makeInstance(DeletedRestriction::class));
-        $qb->select('*')->from($relation['table'])->where(
-            $qb->expr()->eq($relation['foreignField'], $qb->createNamedParameter($parentUid, Connection::PARAM_INT))
-        );
-        foreach ($relation['matchFields'] as $field => $value) {
-            $qb->andWhere($qb->expr()->eq($field, $qb->createNamedParameter($value)));
-        }
-        if ($schema->isLanguageAware()) {
-            $languageField = $schema->getCapability(TcaSchemaCapability::Language)->getLanguageField()->getName();
-            $qb->andWhere($qb->expr()->eq($languageField, 0));
-        }
-        return $qb->executeQuery()->fetchAllAssociative();
-    }
-
-    /**
-     * @param array<string, array<int, int>> $copyMapping
-     */
-    private function findTranslationUid(string $table, int $sourceUid, int $languageId, array $copyMapping): ?int
-    {
-        if (isset($copyMapping[$table][$sourceUid])) {
-            return (int)$copyMapping[$table][$sourceUid];
-        }
-        $schema = $this->tcaSchemaFactory->get($table);
-        if (!$schema->isLanguageAware()) {
-            return null;
-        }
-        $capability = $schema->getCapability(TcaSchemaCapability::Language);
-        $qb = $this->connectionPool->getQueryBuilderForTable($table);
-        $qb->getRestrictions()->removeAll()->add(GeneralUtility::makeInstance(DeletedRestriction::class));
-        $sourceFields = [$capability->getTranslationOriginPointerField()->getName()];
-        if ($capability->hasTranslationSourceField()) {
-            $sourceFields[] = $capability->getTranslationSourceField()->getName();
-        }
-        $uid = $qb->select('uid')->from($table)->where(
-            $qb->expr()->eq($capability->getLanguageField()->getName(), $qb->createNamedParameter($languageId, Connection::PARAM_INT)),
-            $qb->expr()->or(...array_map(
-                static fn(string $f) => $qb->expr()->eq($f, $qb->createNamedParameter($sourceUid, Connection::PARAM_INT)),
-                $sourceFields
-            )),
-        )->orderBy('uid', 'DESC')->setMaxResults(1)->executeQuery()->fetchOne();
-        return $uid === false ? null : (int)$uid;
-    }
-
-    private function findPageTranslation(int $pageUid, int $languageId): ?int
-    {
-        $qb = $this->connectionPool->getQueryBuilderForTable('pages');
-        $qb->getRestrictions()->removeAll()->add(GeneralUtility::makeInstance(DeletedRestriction::class));
-        $uid = $qb->select('uid')->from('pages')->where(
-            $qb->expr()->eq('l10n_parent', $qb->createNamedParameter($pageUid, Connection::PARAM_INT)),
-            $qb->expr()->eq('sys_language_uid', $qb->createNamedParameter($languageId, Connection::PARAM_INT)),
-        )->setMaxResults(1)->executeQuery()->fetchOne();
-        return $uid === false ? null : (int)$uid;
     }
 
     /**

@@ -38,4 +38,22 @@ final class ProviderRegistry
     {
         return $this->providers;
     }
+
+    /**
+     * Eingerichtete Anbieter (mit API-Key), der Standard-Anbieter zuerst.
+     *
+     * @return array<string, TranslationProviderInterface>
+     */
+    public function configured(string $defaultIdentifier = ''): array
+    {
+        $result = array_filter($this->providers, static fn(TranslationProviderInterface $p) => $p->isConfigured());
+        if (isset($result[$defaultIdentifier])) {
+            $result = [$defaultIdentifier => $result[$defaultIdentifier]] + $result;
+        }
+        // Test-Anbieter nur anbieten, wenn kein echter eingerichtet ist
+        if (count($result) > 1) {
+            unset($result['pseudo']);
+        }
+        return $result;
+    }
 }

@@ -42,3 +42,22 @@ CREATE TABLE tx_aitranslator_state (
     KEY source (tablename, source_uid, language),
     KEY page_language (page_uid, language)
 );
+
+#
+# Warteschlange für Massenübersetzungen (je Eintrag eine Seite in einer Sprache)
+#
+CREATE TABLE tx_aitranslator_queue (
+    uid int(11) unsigned NOT NULL auto_increment,
+    crdate int(11) unsigned DEFAULT '0' NOT NULL,
+    tstamp int(11) unsigned DEFAULT '0' NOT NULL,
+    be_user int(11) unsigned DEFAULT '0' NOT NULL,
+    page_uid int(11) unsigned DEFAULT '0' NOT NULL,
+    language int(11) DEFAULT '0' NOT NULL,
+    provider varchar(50) DEFAULT '' NOT NULL,
+    status varchar(20) DEFAULT 'pending' NOT NULL,
+    message text,
+
+    PRIMARY KEY (uid),
+    KEY status (status, uid),
+    KEY page_language (page_uid, language)
+);

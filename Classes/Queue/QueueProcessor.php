@@ -1,0 +1,51 @@
+<?php
+
+declare(strict_types=1);
+
+namespace Netwerk\AiTranslator\Queue;
+
+use Netwerk\AiTranslator\Service\TranslationService;
+use Psr\Log\LoggerInterface;
+use TYPO3\CMS\Backend\Utility\BackendUtility;
+
+/**
+ * Arbeitet die Warteschlange ab – Eintrag für Eintrag (aus dem Modul per Browser oder per CLI/Cronjob).
+ */
+final readonly class QueueProcessor
+{
+    public function __construct(
+        private QueueRepository $queue,
+        private TranslationService $translationService,
+        private LoggerInterface $logger,
+    ) {}
+
+    /**
+     * Verarbeitet den nächsten Eintrag.
+     *
+     * @return array{uid: int, page: int, title: string, status: string, message: string}|null null, wenn die Warteschlange leer ist
+     */
+    public function processNext(): ?array
+    {
+        $item = $this->queue->claimNext();
+        if ($item === null) {
+            return null;
+        }
+        $uid = (int)$item['uid'];
+        $pageUid = (int)$item['page_uid'];
+        $title = (string)(BackendUtility::getRecord('pages', $pageUid, 'title')['title'] ?? ('#' . $pageUid));
+        try {
+            $result = $this->translationService->updatePage($pageUid, (int)$item['language'], (string)$item['provider']);
+            $message = match (true) {
+                $result['createdPage'] => sprintf('Seite angelegt, %d Datensätze übersetzt', $result['records']),
+                $result['records'] > 0 => sprintf('%d Datensätze aktualisiert', $result['records']),
+                default => 'Bereits aktuell',
+            };
+            $this->queue->finish($uid, QueueRepository::DONE, $message);
+            return ['uid' => $uid, 'page' => $pageUid, 'title' => $title, 'status' => QueueRepository::DONE, 'message' => $message];
+        } catch (\Throwable $e) {
+            $this->logger->error('AI translation of page {page} failed: {message}', ['page' => $pageUid, 'message' => $e->getMessage(), 'exception' => $e]);
+            $this->queue->finish($uid, QueueRepository::ERROR, $e->getMessage());
+            return ['uid' => $uid, 'page' => $pageUid, 'title' => $title, 'status' => QueueRepository::ERROR, 'message' => $e->getMessage()];
+        }
+    }
+}

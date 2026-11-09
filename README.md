@@ -5,16 +5,19 @@
 - Neue Option **„KI-Übersetzung mit …“** im Übersetzen-Dialog des Seiten-Moduls (für Seiten und einzelne Inhaltselemente)
 - Übersetzt alle sichtbaren Textfelder: Überschriften, Texte (RTE inkl. `title`/`alt`-Attribute), Link-Beschriftungen und **Link-Titel**, Inline-Kinder (z. B. FAQ-Einträge, Bild-Metadaten am Inhaltselement)
 - Legt fehlende Seitenübersetzungen an und übersetzt die **Seiteneigenschaften** inkl. SEO-Feldern; der **Slug** wird aus dem übersetzten Titel neu erzeugt
-- Backend-Modul **Inhalt → KI-Übersetzung**: Status der Anbieter, Verbindungstest, Verbrauch der letzten 30 Tage, Protokoll aller Übersetzungen
-- Speichert pro übersetztem Feld einen Hash des Ausgangstexts (Grundlage für die Erkennung veralteter Übersetzungen in Version 1.1)
+- **Erkennt veraltete Übersetzungen**: Ändert sich der deutsche Text, zeigt das Seiten-Modul einen Hinweis mit Schaltfläche „Mit … aktualisieren“, betroffene Inhaltselemente erhalten ein Badge „Übersetzung veraltet“
+- **Nachübersetzen nur des Geänderten**: geänderte Felder, neue Unterelemente (z. B. eine neue FAQ-Frage) und noch nicht übersetzte Inhalte – unveränderte, von Hand angepasste Texte bleiben erhalten
+- Backend-Modul **Inhalt → KI-Übersetzung**
+  - *Übersicht & Massenübersetzung*: Übersetzungsstand aller Seiten je Sprache (nicht übersetzt / veraltet / unvollständig / aktuell), Auswahl mehrerer Seiten, Abarbeitung über eine Warteschlange mit Fortschrittsanzeige oder per Cronjob
+  - *Anbieter & Protokoll*: Status der Anbieter, Verbindungstest, Verbrauch der letzten 30 Tage, Protokoll aller Übersetzungen
+- Übersetzt auch eigenständige Datensätze in Ordnern (z. B. Blog-Kategorien und Schlagwörter)
 
-Nicht übersetzt werden Felder mit `l10n_mode = exclude`, schreibgeschützte Felder, Code-/HTML-Editoren, Zahlen-/Datums-/E-Mail-Felder sowie alles, was in der Konfiguration unter „Ausgeschlossene Felder“ steht.
+Nicht übersetzt werden Felder mit `l10n_mode = exclude`, schreibgeschützte Felder, Code-/HTML-Editoren, JSON-Felder, Zahlen-/Datums-/E-Mail-Felder, Autorennamen und Social-Media-Handles, technische Verknüpfungsfelder sowie alles, was in der Konfiguration unter „Ausgeschlossene Felder“ steht. Bei Bildreferenzen werden nur Titel, Alternativtext, Beschreibung und Link übersetzt.
 
 ## Voraussetzungen
 
 - TYPO3 14.3, PHP 8.2+
 - Mindestens ein API-Key (siehe [API-Keys besorgen](#api-keys-besorgen))
-- Lesezugriff auf das private Repository `netwerk-kreidl/typo3-ai-translator`
 
 ## Installation (DDEV)
 
@@ -25,17 +28,28 @@ ddev composer require netwerk/typo3-ai-translator:^1.0
 ddev typo3 extension:setup --extension=ai_translator
 ```
 
-`ddev auth ssh` reicht den lokalen SSH-Agent in den Container durch, damit Composer das private Repository klonen kann.
-`extension:setup` legt die Tabellen `tx_aitranslator_log` und `tx_aitranslator_state` an.
+`ddev auth ssh` reicht den lokalen SSH-Agent in den Container durch, damit Composer das Repository per SSH klonen kann.
+`extension:setup` legt die Tabellen `tx_aitranslator_log`, `tx_aitranslator_state` und `tx_aitranslator_queue` an.
+
+Update auf eine neue Version: `ddev composer update netwerk/typo3-ai-translator` und danach erneut `extension:setup`.
 
 ### Deployment
 
-Auch der Build- bzw. Zielserver muss das private Repository lesen können:
+Nach dem Deployment `typo3 extension:setup` ausführen (bzw. den Database Analyzer), damit neue Tabellen angelegt werden.
 
-- **Composer läuft am Server** (z. B. Deployer): öffentlichen SSH-Schlüssel des Servers im Repository unter *Settings → Deploy keys* eintragen (nur Lesezugriff). Ein Deploy-Key gilt jeweils nur für ein Repository – für jede private Extension einen eigenen Schlüssel oder einen Maschinen-User mit Lesezugriff auf alle verwenden.
-- **Composer läuft in GitHub Actions**: einen Deploy-Key als Secret hinterlegen und per `webfactory/ssh-agent` laden (mehrere Schlüssel sind möglich).
+Das Repository ist öffentlich, Composer lädt es deshalb auch auf dem Server und in GitHub Actions ohne Zugangsdaten.
+Wird es wieder privat geschaltet, braucht jede Stelle, an der `composer install` läuft, Lesezugriff:
+GitHub Actions z. B. über einen Fine-grained Token (*Contents: Read-only*) als `COMPOSER_AUTH`, der Server über einen Deploy-Key.
 
-Nach dem Deployment `typo3 extension:setup` ausführen (bzw. den Database Analyzer), damit die Tabellen angelegt werden.
+### Cronjob für die Massenübersetzung (optional)
+
+Die Warteschlange wird im Modul abgearbeitet, solange die Seite geöffnet ist. Für große Mengen oder unbeaufsichtigt per Cronjob, z. B. alle 5 Minuten:
+
+```bash
+vendor/bin/typo3 ai-translator:queue:process --time-limit=240
+```
+
+`--limit=N` begrenzt die Anzahl Seiten pro Lauf. Einträge, die länger als 15 Minuten „in Arbeit“ hängen, werden automatisch erneut versucht.
 
 ## Konfiguration
 
@@ -69,7 +83,8 @@ Das Modul zeigt bei jedem Anbieter, ob der Key aus der Umgebung kommt.
 ### Berechtigungen
 
 Administratoren dürfen immer übersetzen. Für Redakteure in der Backend-Benutzergruppe unter
-*Zugriffsrechte → Benutzerdefinierte Optionen → KI-Übersetzung → „Mit KI übersetzen“* freischalten.
+*Zugriffsrechte → Benutzerdefinierte Optionen → KI-Übersetzung → „KI-Übersetzung verwenden“* freischalten.
+Damit sehen sie die Optionen im Übersetzen-Dialog und die Schaltfläche „Aktualisieren“ im Seiten-Modul; den Hinweis auf veraltete Übersetzungen sehen alle Redakteure.
 Zusätzlich braucht die Gruppe wie gewohnt Schreibrechte auf Seiten/Inhalte und die Zielsprache.
 Das Modul „KI-Übersetzung“ wird wie jedes andere Modul in der Gruppe freigegeben.
 
@@ -123,18 +138,35 @@ Alle Anbieter erhalten nur die zu übersetzenden Texte – keine Benutzerdaten.
 
 Der Modus (verbundene Übersetzung oder freie Kopie) richtet sich nach der Auswahl im Dialog bzw. dem bestehenden Modus der Seite.
 
+### Veraltete Übersetzungen
+
+Ein Feld gilt als veraltet, wenn sich der Ausgangstext seit der Übersetzung geändert hat:
+
+- **Verbundene Übersetzungen** (Standard): Vergleich mit dem Stand, den TYPO3 beim Speichern der Übersetzung festhält (`l10n_diffsource`). Das funktioniert auch für Inhalte, die von Hand übersetzt wurden. Wie im TYPO3-Standard gilt eine Übersetzung als geprüft, sobald sie im Formular gespeichert wird.
+- **Freie Übersetzungen** (Kopien): Vergleich mit dem Fingerabdruck, den die KI-Übersetzung gespeichert hat; wurde das übersetzte Feld seitdem von Hand geändert, gilt es als erledigt.
+- **Neue Unterelemente** (z. B. FAQ-Fragen, Bilder) und **noch nicht übersetzte Inhaltselemente** werden ebenfalls gemeldet und beim Aktualisieren ergänzt.
+
+Beim Aktualisieren wird die URL (Slug) bestehender Übersetzungen **nicht** verändert, damit keine Links brechen. Soll sie zum neuen Titel passen, in den Seiteneigenschaften der Übersetzung neu erzeugen (TYPO3 legt dabei eine Weiterleitung an).
+
+### Massenübersetzung
+
+Modul **Inhalt → KI-Übersetzung → Übersicht & Massenübersetzung**: Sprache wählen, Seiten mit Handlungsbedarf anhaken, Anbieter wählen, „In Warteschlange stellen & starten“.
+Fehlende Seiten werden samt Inhalten angelegt, bestehende nur aktualisiert. Ordner mit Datensätzen (z. B. Blog-Kategorien) erscheinen ebenfalls in der Liste.
+Übersetzt wird von oben nach unten im Seitenbaum. Übergeordnete Seiten deshalb mit auswählen, damit die URL von Unterseiten den übersetzten Pfad erhält (z. B. `/en/rooms-suites/junior-suite/`).
+
 Für Tests ohne API-Key gibt es im Kontext **Development** zusätzlich den Anbieter „Test-Übersetzung (ohne KI)“, der Texte nur mit `[EN] ` voranstellt.
 
 ## Fehlerbehebung
 
-- **Option fehlt im Dialog**: Kein API-Key für den Anbieter, oder dem Benutzer fehlt die Berechtigung „Mit KI übersetzen“.
+- **Option fehlt im Dialog**: Kein API-Key für den Anbieter, oder dem Benutzer fehlt die Berechtigung „KI-Übersetzung verwenden“.
+- **Kein Hinweis im Seiten-Modul**: Der Hinweis erscheint nur für bereits angelegte Seitenübersetzungen und Sprachen, für die der Benutzer Rechte hat.
 - **401/403**: API-Key falsch oder (DeepL) Free-Key gegen Pro-Endpoint bzw. umgekehrt – im Modul „Verbindung testen“.
 - **429 / Kontingent**: Limit beim Anbieter erreicht; später erneut versuchen oder Guthaben aufladen.
 - Fehler werden im Modul-Protokoll und in `var/log/typo3_*.log` festgehalten.
 
 ## Roadmap
 
-- **1.1** – Hinweis auf veraltete Übersetzungen (Ausgangstext geändert) im Seiten-Modul, Übersicht pro Sprache im Modul, gezieltes Nachübersetzen geänderter Felder, Massenübersetzung über eine Warteschlange
+- **1.1** ✓ Hinweis auf veraltete Übersetzungen, Übersicht pro Sprache, Nachübersetzen geänderter Felder, Massenübersetzung
 - **1.2** – Dateimetadaten (Titel, Alternativtext, Beschreibung) in der Dateiliste übersetzen
 
 ## Lizenz

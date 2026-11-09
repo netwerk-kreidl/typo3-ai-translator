@@ -18,3 +18,13 @@ services:
 
   Netwerk\AiTranslator\Service\TranslationService:
     public: true
+
+  Netwerk\AiTranslator\Status\StatusService:
+    public: true
+
+  Netwerk\AiTranslator\Service\RecordFinder:
+    public: true
+
+  Netwerk\AiTranslator\Queue\:
+    resource: '../Classes/Queue/*'
+    public: true
