@@ -93,6 +93,18 @@ final class QueueRepository
         return null;
     }
 
+    /**
+     * Eintrag wieder freigeben (z. B. Monatslimit erreicht) – er wird später erneut verarbeitet.
+     */
+    public function release(int $uid, string $message = ''): void
+    {
+        $this->connectionPool->getConnectionForTable(self::TABLE)->update(
+            self::TABLE,
+            ['status' => self::PENDING, 'message' => mb_substr($message, 0, 2000), 'tstamp' => time()],
+            ['uid' => $uid],
+        );
+    }
+
     public function finish(int $uid, string $status, string $message = ''): void
     {
         $this->connectionPool->getConnectionForTable(self::TABLE)->update(

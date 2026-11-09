@@ -1,0 +1,46 @@
+# Einstellungen der KI-Übersetzung pro Website (Site Management → Einstellungen → KI-Übersetzung).
+# Leere Werte übernehmen die globale Extension-Konfiguration; Listen werden mit ihr zusammengeführt.
+categories:
+  aiTranslator:
+    label: 'KI-Übersetzung'
+
+settings:
+  aiTranslator.formality:
+    label: 'Anrede'
+    description: 'Gilt für alle Anbieter, sofern die Zielsprache das unterscheidet. Leer = globale Einstellung der Extension.'
+    category: aiTranslator
+    type: string
+    default: ''
+    enum:
+      '': 'wie Extension-Konfiguration'
+      formal: 'Sie (förmlich)'
+      informal: 'du (informell)'
+      default: 'neutral'
+
+  aiTranslator.styleHint:
+    label: 'Stil-Hinweis (ChatGPT/Claude)'
+    description: 'Ton und Zielgruppe, z. B. „Gehobener, herzlicher Ton eines 4-Sterne-Boutiquehotels in Wien“. Leer = globale Einstellung.'
+    category: aiTranslator
+    type: text
+    default: ''
+
+  aiTranslator.doNotTranslate:
+    label: 'Nicht übersetzen'
+    description: 'Begriffe, die unverändert bleiben (z. B. Markennamen). Ergänzt die globale Liste.'
+    category: aiTranslator
+    type: stringlist
+    default: []
+
+  aiTranslator.glossary:
+    label: 'Glossar'
+    description: 'Feste Übersetzungen, eine pro Zeile: „Begriff=Übersetzung“. Nur für eine Sprache: „en: Begriff=Übersetzung“. Gilt für DeepL, ChatGPT und Claude und ergänzt bzw. überschreibt das globale Glossar.'
+    category: aiTranslator
+    type: text
+    default: ''
+
+  aiTranslator.hideNewPages:
+    label: 'Neue Seitenübersetzungen verbergen'
+    description: 'Neu angelegte Seitenübersetzungen bleiben verborgen, bis sie geprüft und sichtbar geschaltet werden.'
+    category: aiTranslator
+    type: bool
+    default: false

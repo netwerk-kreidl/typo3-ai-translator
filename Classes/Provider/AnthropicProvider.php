@@ -42,7 +42,8 @@ final class AnthropicProvider extends AbstractLlmProvider
     {
         $model = $this->settings->get('anthropicModel', self::DEFAULT_MODEL) ?: self::DEFAULT_MODEL;
         $effort = $this->settings->get('anthropicEffort', 'low') ?: 'low';
-        $client = new Client(apiKey: $this->settings->get('anthropicApiKey'));
+        // Das SDK wiederholt 408/409/429/5xx und Verbindungsfehler selbst mit Wartezeit
+        $client = new Client(apiKey: $this->settings->get('anthropicApiKey'), requestOptions: ['maxRetries' => 4]);
         try {
             $message = $client->beta->messages->create(
                 maxTokens: 16000,

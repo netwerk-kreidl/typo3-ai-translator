@@ -50,6 +50,10 @@ final class ProcessQueueCommand extends Command
             if ($result === null) {
                 break;
             }
+            if ($result['status'] === QueueProcessor::STATUS_BUDGET) {
+                $io->warning($result['message']);
+                break;
+            }
             $processed++;
             if ($result['status'] === QueueRepository::ERROR) {
                 $errors++;

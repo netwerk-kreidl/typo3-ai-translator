@@ -87,7 +87,7 @@
 
             <f:render partial="Queue" arguments="{_all}" />
 
-            <form method="post" action="{enqueueUrl}">
+            <form method="post" action="{enqueueUrl}" data-ait-estimate-form data-type="files" data-language="{languageId}">
                 <input type="hidden" name="type" value="files" />
                 <input type="hidden" name="language" value="{languageId}" />
                 <input type="hidden" name="storage" value="{storageUid}" />
@@ -140,6 +140,7 @@
                                                     <f:defaultCase><span class="badge badge-default">ohne Texte</span></f:defaultCase>
                                                 </f:switch>
                                                 <f:if condition="{file.queued}"><span class="badge badge-default">in Warteschlange</span></f:if>
+                                                <f:if condition="{file.unreviewed}"><span class="badge badge-info" title="Automatisch übersetzt, noch von niemandem gespeichert">ungeprüft</span></f:if>
                                                 <f:if condition="{file.fields}">
                                                     <div class="small">Geändert: <f:for each="{file.fields}" as="label" iteration="i">{label}<f:if condition="{i.isLast}"><f:else>, </f:else></f:if></f:for></div>
                                                 </f:if>
@@ -164,6 +165,7 @@
                                 <button type="submit" class="btn btn-primary">
                                     <core:icon identifier="ai-translator-handler" size="small" /> In Warteschlange stellen &amp; starten
                                 </button>
+                                <span class="small" data-ait-estimate aria-live="polite"></span>
                             </div>
                         </f:if>
                     </f:then>

@@ -17,6 +17,7 @@ final readonly class PageStatus
     /**
      * @param list<OutdatedRecord> $outdated
      * @param list<array{table: string, uid: int, label: string}> $missing Datensätze ohne Übersetzung
+     * @param array<string, array<int, true>> $unreviewed KI-übersetzt, noch nicht geprüft: Tabelle => Übersetzungs-UIDs (oberste Datensätze)
      */
     public function __construct(
         public int $pageUid,
@@ -25,7 +26,18 @@ final readonly class PageStatus
         public ?int $pageTranslationUid,
         public array $outdated,
         public array $missing,
+        public array $unreviewed = [],
     ) {}
+
+    public function getUnreviewedCount(): int
+    {
+        return array_sum(array_map('count', $this->unreviewed));
+    }
+
+    public function isUnreviewed(string $table, int $translationUid): bool
+    {
+        return isset($this->unreviewed[$table][$translationUid]);
+    }
 
     public function getState(): string
     {

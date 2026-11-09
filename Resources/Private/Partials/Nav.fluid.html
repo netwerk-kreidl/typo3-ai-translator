@@ -7,4 +7,10 @@
         </li>
     </f:for>
 </ul>
+<f:if condition="{budget.budget}">
+    <p class="small mb-3">
+        Kosten diesen Monat (geschätzt): <strong>{budget.spentFormatted} €</strong> von {budget.budgetFormatted} € Monatslimit
+        <span class="progress d-inline-flex align-middle ms-2" style="width: 10rem; height: .5rem" role="progressbar" aria-label="Verbrauch des Monatslimits" aria-valuenow="{budget.percent}" aria-valuemin="0" aria-valuemax="100"><span class="progress-bar{f:if(condition: '{budget.percent} > 90', then: ' bg-danger')}" style="width: {budget.percent}%"></span></span>
+    </p>
+</f:if>
 </html>

@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace Netwerk\AiTranslator\Provider;
 
 use Netwerk\AiTranslator\Configuration\ExtensionSettings;
-use TYPO3\CMS\Core\Http\RequestFactory;
 
 /**
  * ChatGPT über die OpenAI Chat-Completions-API mit strukturierter Ausgabe (JSON-Schema).
@@ -17,7 +16,7 @@ final class OpenAiProvider extends AbstractLlmProvider
 
     public function __construct(
         private readonly ExtensionSettings $settings,
-        private readonly RequestFactory $requestFactory,
+        private readonly RetryingHttpClient $httpClient,
     ) {}
 
     public function getIdentifier(): string
@@ -39,7 +38,7 @@ final class OpenAiProvider extends AbstractLlmProvider
     {
         $model = $this->settings->get('openaiModel', self::DEFAULT_MODEL) ?: self::DEFAULT_MODEL;
         try {
-            $response = $this->requestFactory->request(self::ENDPOINT, 'POST', [
+            $response = $this->httpClient->request(self::ENDPOINT, 'POST', [
                 'headers' => [
                     'Authorization' => 'Bearer ' . $this->settings->get('openaiApiKey'),
                     'Content-Type' => 'application/json',
@@ -56,7 +55,6 @@ final class OpenAiProvider extends AbstractLlmProvider
                     ],
                 ],
                 'timeout' => 300,
-                'http_errors' => false,
             ]);
         } catch (\Throwable $e) {
             throw new TranslationException('ChatGPT: Keine Verbindung zur API.', 1793130201, $e);

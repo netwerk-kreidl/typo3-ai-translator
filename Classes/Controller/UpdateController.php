@@ -4,6 +4,9 @@ declare(strict_types=1);
 
 namespace Netwerk\AiTranslator\Controller;
 
+use Netwerk\AiTranslator\Cost\BudgetGuard;
+use Netwerk\AiTranslator\Cost\CostCalculator;
+use Netwerk\AiTranslator\Domain\Repository\StateRepository;
 use Netwerk\AiTranslator\Provider\TranslationException;
 use Netwerk\AiTranslator\Queue\QueueProcessor;
 use Netwerk\AiTranslator\Queue\QueueRepository;
@@ -32,6 +35,9 @@ final readonly class UpdateController
         private QueueRepository $queue,
         private FlashMessageService $flashMessageService,
         private UriBuilder $uriBuilder,
+        private CostCalculator $costCalculator,
+        private BudgetGuard $budgetGuard,
+        private StateRepository $stateRepository,
     ) {}
 
     public function updateAction(ServerRequestInterface $request): ResponseInterface
@@ -95,6 +101,56 @@ final readonly class UpdateController
             ContextualFeedbackSeverity::OK
         );
         return new RedirectResponse($returnUrl);
+    }
+
+    /**
+     * Alle KI-Übersetzungen einer Seite in einer Sprache als geprüft markieren.
+     */
+    public function reviewAction(ServerRequestInterface $request): ResponseInterface
+    {
+        $body = (array)$request->getParsedBody();
+        $pageUid = (int)($body['page'] ?? 0);
+        $languageId = (int)($body['language'] ?? 0);
+        $returnUrl = GeneralUtility::sanitizeLocalUrl((string)($body['returnUrl'] ?? ''))
+            ?: (string)$this->uriBuilder->buildUriFromRoute('web_layout', ['id' => $pageUid]);
+        if ($pageUid > 0 && Permission::canEditLanguage($languageId) && $GLOBALS['BE_USER']->isInWebMount($pageUid)) {
+            $count = $this->stateRepository->markPageReviewed($pageUid, $languageId);
+            $this->flash(sprintf('%d übersetzte Texte wurden als geprüft markiert.', $count), ContextualFeedbackSeverity::OK);
+        }
+        return new RedirectResponse($returnUrl);
+    }
+
+    /**
+     * Kostenschätzung für die im Modul ausgewählten Seiten bzw. Dateien.
+     */
+    public function estimateAction(ServerRequestInterface $request): ResponseInterface
+    {
+        if (!Permission::canTranslate()) {
+            return new JsonResponse(['error' => 'Keine Berechtigung.'], 403);
+        }
+        $body = (array)$request->getParsedBody();
+        $languageId = (int)($body['language'] ?? 0);
+        $provider = (string)($body['provider'] ?? '');
+        $isFiles = ($body['type'] ?? '') === 'files';
+        $uids = array_slice(array_values(array_filter(array_map(intval(...), (array)($body['ids'] ?? [])))), 0, 500);
+        $characters = 0;
+        foreach ($uids as $uid) {
+            $characters += $isFiles
+                ? $this->translationService->estimateFile($uid, $languageId)
+                : $this->translationService->estimatePage($uid, $languageId);
+        }
+        $cost = $this->costCalculator->estimate($provider, $characters);
+        $budget = $this->budgetGuard->getStatus();
+        return new JsonResponse([
+            'characters' => $characters,
+            'cost' => round($cost, 4),
+            'costFormatted' => BudgetGuard::format($cost),
+            'budget' => $budget['budget'],
+            'spent' => $budget['spent'],
+            'spentFormatted' => BudgetGuard::format($budget['spent']),
+            'budgetFormatted' => BudgetGuard::format($budget['budget']),
+            'exceeds' => $budget['budget'] > 0 && $budget['spent'] + $cost > $budget['budget'],
+        ]);
     }
 
     /**

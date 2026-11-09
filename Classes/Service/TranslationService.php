@@ -5,6 +5,9 @@ declare(strict_types=1);
 namespace Netwerk\AiTranslator\Service;
 
 use Netwerk\AiTranslator\Configuration\ExtensionSettings;
+use Netwerk\AiTranslator\Cost\BudgetGuard;
+use Netwerk\AiTranslator\Cost\CostCalculator;
+use Netwerk\AiTranslator\Review\ReviewGuard;
 use Netwerk\AiTranslator\Domain\Repository\LogRepository;
 use Netwerk\AiTranslator\Domain\Repository\StateRepository;
 use Netwerk\AiTranslator\Provider\LanguagePair;
@@ -46,6 +49,8 @@ final class TranslationService
         private readonly ConnectionPool $connectionPool,
         private readonly LogRepository $logRepository,
         private readonly StateRepository $stateRepository,
+        private readonly CostCalculator $costCalculator,
+        private readonly BudgetGuard $budgetGuard,
     ) {}
 
     /**
@@ -101,6 +106,7 @@ final class TranslationService
                     'fields' => array_intersect_key($all, $outdated->fields),
                     'hint' => $this->hint($outdated->table, $row),
                     'translationUid' => $outdated->translationUid,
+                    'top' => [$outdated->topTable, $outdated->topTranslationUid],
                 ];
                 $fields += count($outdated->fields);
             }
@@ -113,7 +119,7 @@ final class TranslationService
                 foreach ($children['uids'] as $childUid) {
                     $child = BackendUtility::getRecord($children['table'], $childUid);
                     if ($child !== null) {
-                        $this->collect($children['table'], $child, $items);
+                        $this->collect($children['table'], $child, $items, 1, null, [$outdated->topTable, $outdated->topTranslationUid]);
                     }
                 }
             }
@@ -214,6 +220,96 @@ final class TranslationService
     }
 
     /**
+     * Zu übersetzende Zeichen, wenn die Seite jetzt aktualisiert würde (für die Kostenschätzung).
+     */
+    public function estimatePage(int $pageUid, int $targetLanguageId): int
+    {
+        $status = $this->statusService->getPageStatus($pageUid, $targetLanguageId, true);
+        $items = [];
+        if (!$status->isFolder && $status->pageTranslationUid === null) {
+            $page = BackendUtility::getRecord('pages', $pageUid);
+            if ($page !== null) {
+                $this->collect('pages', $page, $items);
+            }
+        }
+        foreach ($status->outdated as $outdated) {
+            $row = BackendUtility::getRecord($outdated->table, $outdated->sourceUid);
+            if ($row === null) {
+                continue;
+            }
+            $items[] = [
+                'table' => $outdated->table,
+                'row' => $row,
+                'fields' => array_intersect_key($this->fieldResolver->getTranslatableFields($outdated->table, $row), $outdated->fields),
+                'hint' => '',
+            ];
+            foreach ($outdated->newChildren as $children) {
+                foreach ($children['uids'] as $childUid) {
+                    $child = BackendUtility::getRecord($children['table'], $childUid);
+                    if ($child !== null) {
+                        $this->collect($children['table'], $child, $items, 1);
+                    }
+                }
+            }
+        }
+        foreach ($status->missing as $missing) {
+            $row = BackendUtility::getRecord($missing['table'], $missing['uid']);
+            if ($row !== null) {
+                $this->collect($missing['table'], $row, $items);
+            }
+        }
+        return $this->countItemCharacters($items);
+    }
+
+    /**
+     * Zu übersetzende Zeichen der Metadaten einer Datei (für die Kostenschätzung).
+     */
+    public function estimateFile(int $fileUid, int $targetLanguageId): int
+    {
+        $metadata = $this->finder->findFileMetadata($fileUid);
+        if ($metadata === null) {
+            return 0;
+        }
+        $fields = $this->fieldResolver->getTranslatableFields('sys_file_metadata', $metadata);
+        $translationUid = $this->finder->findTranslationUid('sys_file_metadata', (int)$metadata['uid'], $targetLanguageId);
+        $translation = $translationUid !== null ? BackendUtility::getRecord('sys_file_metadata', $translationUid) : null;
+        if ($translation !== null) {
+            $fields = array_intersect_key($fields, $this->statusService->getChangedFields('sys_file_metadata', $metadata, $translation));
+        }
+        return $this->countItemCharacters([['table' => 'sys_file_metadata', 'row' => $metadata, 'fields' => $fields, 'hint' => '']]);
+    }
+
+    /**
+     * @param list<array<string, mixed>> $items
+     */
+    private function countItemCharacters(array $items): int
+    {
+        $segments = [];
+        foreach ($items as $i => $item) {
+            foreach ($item['fields'] as $field) {
+                foreach ($this->codec->encode($field, (string)($item['row'][$field->name] ?? ''), '')['segments'] as $suffix => $segment) {
+                    $segments[$i . ':' . $field->name . ':' . $suffix] = $segment;
+                }
+            }
+        }
+        return self::countSegmentCharacters($segments);
+    }
+
+    /**
+     * Abrechnungsrelevante Zeichen (sichtbarer Text, ohne HTML-Tags).
+     *
+     * @param array<string, Segment> $segments
+     */
+    private static function countSegmentCharacters(array $segments): int
+    {
+        $characters = 0;
+        foreach ($segments as $segment) {
+            $characters += mb_strlen(html_entity_decode(strip_tags($segment->text), ENT_QUOTES | ENT_HTML5, 'UTF-8'));
+        }
+        return $characters;
+    }
+
+    /**
      * Einzelner Datensatz (z. B. ein Inhaltselement aus der Listenansicht).
      *
      * @throws TranslationException
@@ -245,6 +341,17 @@ final class TranslationService
      */
     private function run(array $items, array $commands, Site $site, array $page, int $targetLanguageId, string $providerId, string $logTable, int $logUid, string $logMessage = ''): int
     {
+        // Speichervorgänge der KI-Übersetzung gelten nicht als „von einem Redakteur geprüft“
+        return ReviewGuard::run(fn(): int => $this->execute($items, $commands, $site, $page, $targetLanguageId, $providerId, $logTable, $logUid, $logMessage));
+    }
+
+    /**
+     * @param list<array<string, mixed>> $items
+     * @param array<string, array<int, array<string, mixed>>> $commands
+     * @param array<string, mixed> $page
+     */
+    private function execute(array $items, array $commands, Site $site, array $page, int $targetLanguageId, string $providerId, string $logTable, int $logUid, string $logMessage): int
+    {
         @set_time_limit(600);
         $provider = $this->providers->get($providerId);
         if (!$provider->isConfigured()) {
@@ -271,15 +378,11 @@ final class TranslationService
         // 2. Übersetzen (vor dem Anlegen – bei Fehlern bleibt alles unverändert)
         $result = new TranslationResult([], $providerId);
         if ($segments !== []) {
+            $this->budgetGuard->assertAvailable($providerId, self::countSegmentCharacters($segments));
             $request = new TranslationRequest(
                 $segments,
                 $languages,
-                new TranslationStyle(
-                    in_array($this->settings->get('formality'), ['formal', 'informal'], true) ? $this->settings->get('formality') : 'default',
-                    $this->settings->get('styleHint'),
-                    $this->settings->getList('doNotTranslate'),
-                    $this->settings->getGlossary(),
-                ),
+                $this->settings->styleFor($site, $languages->targetLanguage),
                 (int)($page['uid'] ?? 0) > 0
                     ? sprintf('Website „%s“, Seite „%s“', $site->getConfiguration()['websiteTitle'] ?? $site->getIdentifier(), (string)($page['title'] ?? ''))
                     : sprintf('Website „%s“, %s', $site->getConfiguration()['websiteTitle'] ?? $site->getIdentifier(), (string)($page['title'] ?? '')),
@@ -332,6 +435,8 @@ final class TranslationService
         $datamap = [];
         $state = [];
         $newPageTranslationUid = null;
+        $translationUids = [];
+        $hideNewPages = $this->settings->hideNewPages($site);
         foreach ($items as $i => $item) {
             $table = $item['table'];
             $sourceUid = (int)$item['row']['uid'];
@@ -340,15 +445,23 @@ final class TranslationService
             if ($translationUid === null) {
                 continue;
             }
+            $translationUids[$i] = $translationUid;
+            // Oberster Datensatz (z. B. Inhaltselement eines FAQ-Eintrags) für Hinweise im Seiten-Modul
+            $top = $item['top'] ?? (isset($item['topIndex'], $translationUids[$item['topIndex']])
+                ? [$items[$item['topIndex']]['table'], $translationUids[$item['topIndex']]]
+                : [$table, $translationUid]);
             if ($table === 'pages' && !$isExisting) {
                 $newPageTranslationUid = $translationUid;
+                if ($hideNewPages) {
+                    $datamap['pages'][$translationUid]['hidden'] = 1;
+                }
             }
             if ($isExisting) {
                 // Im Ausgangstext geleerte Felder auch in der Übersetzung leeren
                 foreach ($item['fields'] as $fieldName => $field) {
                     if (!isset($templates[$i][$fieldName]) && trim((string)($item['row'][$fieldName] ?? '')) === '') {
                         $datamap[$table][$translationUid][$fieldName] = '';
-                        $state[] = [$table, $translationUid, $sourceUid, $fieldName, '', ''];
+                        $state[] = [$table, $translationUid, $sourceUid, $fieldName, '', '', $top];
                     }
                 }
             }
@@ -365,7 +478,7 @@ final class TranslationService
                 }
                 $value = $this->codec->decode($template, $parts, $item['fields'][$fieldName]->maxLength);
                 $datamap[$table][$translationUid][$fieldName] = $value;
-                $state[] = [$table, $translationUid, $sourceUid, $fieldName, (string)($item['row'][$fieldName] ?? ''), $value];
+                $state[] = [$table, $translationUid, $sourceUid, $fieldName, (string)($item['row'][$fieldName] ?? ''), $value, $top];
             }
         }
         if ($datamap !== []) {
@@ -382,8 +495,8 @@ final class TranslationService
             $this->regenerateSlug($newPageTranslationUid);
         }
 
-        foreach ($state as [$table, $translationUid, $sourceUid, $field, $sourceValue, $value]) {
-            $this->stateRepository->save($table, $translationUid, $sourceUid, (int)$page['uid'], $targetLanguageId, $field, $sourceValue, $value, $providerId);
+        foreach ($state as [$table, $translationUid, $sourceUid, $field, $sourceValue, $value, $top]) {
+            $this->stateRepository->save($table, $translationUid, $sourceUid, (int)$page['uid'], $targetLanguageId, $field, $sourceValue, $value, $providerId, (string)$top[0], (int)$top[1]);
         }
         $this->log($page, $logTable, $logUid, $targetLanguageId, $providerId, $result->model, count($items), count($segments), $result->characters, $result->inputTokens, $result->outputTokens, 'success', $logMessage);
         return count($items);
@@ -393,22 +506,30 @@ final class TranslationService
      * Sammelt einen Datensatz und rekursiv seine Inline-Kinder (Standardsprache).
      *
      * @param array<string, mixed> $row
-     * @param list<array{table: string, row: array<string, mixed>, fields: array<string, TranslatableField>, hint: string}> $items
+     * @param list<array<string, mixed>> $items
+     * @param int|null $topIndex Index des obersten Datensatzes in $items (null = dieser Datensatz)
+     * @param array{0: string, 1: int}|null $top Bereits bekannte Übersetzung des obersten Datensatzes
      */
-    private function collect(string $table, array $row, array &$items, int $depth = 0): void
+    private function collect(string $table, array $row, array &$items, int $depth = 0, ?int $topIndex = null, ?array $top = null): void
     {
-        $items[] = [
+        $index = count($items);
+        $item = [
             'table' => $table,
             'row' => $row,
             'fields' => $this->fieldResolver->getTranslatableFields($table, $row),
             'hint' => $this->hint($table, $row),
+            'topIndex' => $topIndex ?? $index,
         ];
+        if ($top !== null) {
+            $item['top'] = $top;
+        }
+        $items[] = $item;
         if ($depth > 3) {
             return;
         }
         foreach ($this->fieldResolver->getChildRelations($table, $row) as $relation) {
             foreach ($this->finder->findChildren($relation, (int)$row['uid']) as $child) {
-                $this->collect($relation['table'], $child, $items, $depth + 1);
+                $this->collect($relation['table'], $child, $items, $depth + 1, $topIndex ?? $index, $top);
             }
         }
     }
@@ -452,6 +573,7 @@ final class TranslationService
             'characters' => $characters,
             'input_tokens' => $inputTokens,
             'output_tokens' => $outputTokens,
+            'cost' => $status === 'success' ? round($this->costCalculator->cost($provider, $characters, $inputTokens, $outputTokens), 4) : 0,
             'status' => $status,
             'message' => $message,
         ]);

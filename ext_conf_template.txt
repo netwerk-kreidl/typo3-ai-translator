@@ -10,7 +10,7 @@ styleHint =
 # cat=Allgemein/40; type=string; label=Nicht übersetzen: Kommagetrennte Begriffe, die unverändert bleiben (z. B. Markennamen)
 doNotTranslate =
 
-# cat=Allgemein/50; type=string; label=Glossar (nur ChatGPT/Claude): Feste Übersetzungen, je Eintrag „Begriff=Übersetzung“, durch Semikolon getrennt
+# cat=Allgemein/50; type=string; label=Glossar: Feste Übersetzungen, je Eintrag „Begriff=Übersetzung“, durch Semikolon getrennt; nur für eine Sprache „en: Begriff=Übersetzung“. Gilt für alle Anbieter (DeepL über die Glossar-Funktion)
 glossary =
 
 # cat=Allgemein/60; type=string; label=Ausgeschlossene Felder: Kommagetrennt, „tabelle.feld“ oder „*.feld“ (zusätzlich zu den automatisch erkannten)
@@ -33,3 +33,27 @@ anthropicModel = claude-opus-5-5
 
 # cat=Anthropic/30; type=options[Niedrig (schnell, günstig)=low,Mittel=medium,Hoch=high]; label=Claude Sorgfalt (effort)
 anthropicEffort = low
+
+# cat=Allgemein/70; type=boolean; label=Neue Seitenübersetzungen verbergen: Neu angelegte Seitenübersetzungen bleiben verborgen, bis sie geprüft sind (pro Website auch in den Site-Einstellungen)
+hideNewPages = 0
+
+# cat=Kosten/10; type=string; label=Monatslimit in Euro: Übersetzungen werden gestoppt, sobald die geschätzten Kosten des laufenden Monats das Limit überschreiten würden (0 = kein Limit)
+monthlyBudget = 0
+
+# cat=Kosten/20; type=string; label=DeepL: Euro je 1 Mio. Zeichen (laut Preisliste DeepL API Pro, bitte prüfen)
+priceDeepl = 20
+
+# cat=Kosten/30; type=string; label=ChatGPT: US-Dollar je 1 Mio. Eingabe-Tokens (Preisliste des gewählten Modells, bitte prüfen)
+priceOpenaiInput = 1.25
+
+# cat=Kosten/40; type=string; label=ChatGPT: US-Dollar je 1 Mio. Ausgabe-Tokens
+priceOpenaiOutput = 10
+
+# cat=Kosten/50; type=string; label=Claude: US-Dollar je 1 Mio. Eingabe-Tokens (claude-opus-5-5: 4)
+priceAnthropicInput = 4
+
+# cat=Kosten/60; type=string; label=Claude: US-Dollar je 1 Mio. Ausgabe-Tokens (claude-opus-5-5: 20)
+priceAnthropicOutput = 20
+
+# cat=Kosten/70; type=string; label=Umrechnungskurs US-Dollar → Euro
+usdToEur = 0.9

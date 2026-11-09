@@ -11,6 +11,11 @@
   - *Übersicht & Massenübersetzung*: Übersetzungsstand aller Seiten je Sprache (nicht übersetzt / veraltet / unvollständig / aktuell), Auswahl mehrerer Seiten, Abarbeitung über eine Warteschlange mit Fortschrittsanzeige oder per Cronjob
   - *Anbieter & Protokoll*: Status der Anbieter, Verbindungstest, Verbrauch der letzten 30 Tage, Protokoll aller Übersetzungen
 - Übersetzt auch eigenständige Datensätze in Ordnern (z. B. Blog-Kategorien und Schlagwörter)
+- **Kosten im Griff**: Schätzung in Euro schon bei der Auswahl im Modul, Kosten je Übersetzung im Protokoll, optionales Monatslimit (die Warteschlange hält bei Erreichen an)
+- **Prüf-Workflow**: KI-Übersetzungen sind als „KI-übersetzt – bitte prüfen“ gekennzeichnet, bis ein Redakteur sie speichert; neue Seitenübersetzungen können verborgen angelegt werden
+- **Einstellungen pro Website** (Site Set): Anrede, Stil, Glossar und „Nicht übersetzen“ je Website, Glossar auch je Sprache
+- **Glossar für alle Anbieter**: bei DeepL über die Glossar-Funktion der API
+- **Robust**: automatische Wiederholung bei Überlastung der Anbieter (429/5xx), Unit- und Functional-Tests
 - **Datei-Metadaten** (Titel, Alternativtext, Beschreibung): im Übersetzen-Dialog der Dateiliste, per Aktion je Datei (veraltete Übersetzungen werden in der Dateiliste hervorgehoben) und als Massenübersetzung im Modul-Reiter *Dateien (Metadaten)*
 
 Nicht übersetzt werden Felder mit `l10n_mode = exclude`, schreibgeschützte Felder, Code-/HTML-Editoren, JSON-Felder, Zahlen-/Datums-/E-Mail-Felder, Autorennamen und Social-Media-Handles, technische Verknüpfungsfelder sowie alles, was in der Konfiguration unter „Ausgeschlossene Felder“ steht. Bei Bildreferenzen werden nur Titel, Alternativtext, Beschreibung und Link übersetzt.
@@ -62,9 +67,38 @@ vendor/bin/typo3 ai-translator:queue:process --time-limit=240
 | Anrede | Sie / du / neutral – gilt für alle Anbieter, sofern die Zielsprache das unterscheidet |
 | Stil-Hinweis | Nur ChatGPT/Claude: Ton und Zielgruppe, z. B. „Gehobener, herzlicher Ton eines 4-Sterne-Boutiquehotels in Wien“ |
 | Nicht übersetzen | Kommagetrennte Begriffe, die unverändert bleiben (Markennamen) |
-| Glossar | Nur ChatGPT/Claude: `Begriff=Übersetzung;Begriff2=Übersetzung2` |
+| Glossar | `Begriff=Übersetzung;Begriff2=Übersetzung2`, nur für eine Sprache `en: Begriff=Übersetzung` – gilt für alle Anbieter |
 | Ausgeschlossene Felder | `tabelle.feld` oder `*.feld`, kommagetrennt |
+| Neue Seitenübersetzungen verbergen | Neu angelegte Seitenübersetzungen bleiben verborgen, bis sie geprüft sind |
+| Monatslimit | Euro pro Kalendermonat, 0 = kein Limit (siehe [Kosten](#kosten)) |
+| Preise | Richtwerte für die Kostenanzeige: DeepL in € je 1 Mio. Zeichen, ChatGPT/Claude in US-$ je 1 Mio. Tokens, Umrechnungskurs |
 | API-Keys, Modelle | je Anbieter, siehe unten |
+
+### Einstellungen pro Website
+
+Stil, Glossar, „Nicht übersetzen“, Anrede und „Neue Seitenübersetzungen verbergen“ lassen sich je Website festlegen. Dazu das Site Set in der Site-Konfiguration ergänzen:
+
+```yaml
+# config/sites/<website>/config.yaml
+dependencies:
+  - netwerk/ai-translator
+```
+
+Danach unter **Site Management → Einstellungen → KI-Übersetzung** pflegen (oder in `config/sites/<website>/settings.yaml`):
+
+```yaml
+aiTranslator:
+  styleHint: 'Gehobener, herzlicher Ton eines 4-Sterne-Boutiquehotels in Wien'
+  doNotTranslate:
+    - 'Josefshof'
+  glossary: |
+    Zimmer & Suiten=Rooms & Suites
+    en: Frühstück=breakfast
+```
+
+Leere Werte übernehmen die globale Extension-Konfiguration; Listen und Glossar werden mit ihr zusammengeführt (Einträge der Website haben Vorrang).
+
+**DeepL-Glossar**: Die Extension legt das Glossar bei DeepL automatisch an (je Sprachpaar und Inhalt, höchstens fünf je Sprachpaar) und erzeugt es neu, sobald sich die Einträge ändern. Unterstützt DeepL ein Sprachpaar nicht, wird ohne Glossar übersetzt (Hinweis im TYPO3-Log).
 
 ### API-Keys per Umgebungsvariable (empfohlen)
 
@@ -119,7 +153,11 @@ Hinweis: Lehnt das gewählte Claude-Modell eine Anfrage ab, beantwortet die API 
 
 Datenschutz: API-Eingaben werden von Anthropic nicht zum Training verwendet; DPA ist Teil der Commercial Terms.
 
-### Kosten (grobe Orientierung)
+### Kosten
+
+Das Modul zeigt bei der Auswahl von Seiten oder Dateien eine **Schätzung** (Zeichen und Euro), im Reiter „Anbieter & Protokoll“ die Kosten je Übersetzung und die Summe der letzten 30 Tage.
+Mit einem **Monatslimit** (Extension-Konfiguration → Kosten) wird keine Übersetzung gestartet, die das Limit überschreiten würde – die Warteschlange hält an und kann nach Anheben des Limits fortgesetzt werden.
+Die Beträge sind Richtwerte aus den hinterlegten Preisen (Standard: DeepL API Pro 20 €/1 Mio. Zeichen, Claude Opus 5.5 4 $/20 $ je 1 Mio. Tokens). Maßgeblich ist die Abrechnung des Anbieters; bei Preisänderungen die Werte in der Extension-Konfiguration anpassen.
 
 Eine typische Hotelseite mit 8–10 Inhaltselementen hat etwa 5.000–10.000 Zeichen. Bei DeepL Pro sind das wenige Cent pro Seite, bei ChatGPT/Claude je nach Modell ähnlich bis etwas mehr. Das Modul zeigt Zeichen bzw. Tokens pro Übersetzung und die Summen der letzten 30 Tage; die genauen Preise stehen auf den Preisseiten der Anbieter.
 
@@ -149,6 +187,15 @@ Ein Feld gilt als veraltet, wenn sich der Ausgangstext seit der Übersetzung ge�
 
 Beim Aktualisieren wird die URL (Slug) bestehender Übersetzungen **nicht** verändert, damit keine Links brechen. Soll sie zum neuen Titel passen, in den Seiteneigenschaften der Übersetzung neu erzeugen (TYPO3 legt dabei eine Weiterleitung an).
 
+### Prüfen der KI-Übersetzung
+
+Jede KI-Übersetzung ist zunächst „ungeprüft“:
+
+- Im Seiten-Modul tragen die Elemente das Kennzeichen **„KI-übersetzt – bitte prüfen“**, oben steht ein Hinweis mit der Anzahl.
+- Sobald ein Redakteur das Element (oder die Seiteneigenschaften) speichert, gilt es als geprüft. Alternativ: **„Alles auf dieser Seite als geprüft markieren“**.
+- In der Modul-Übersicht steht je Seite die Zahl ungeprüfter Elemente, im Reiter „Dateien“ je Datei.
+- Mit „Neue Seitenübersetzungen verbergen“ bleiben neu angelegte Seiten unsichtbar, bis sie jemand sichtbar schaltet.
+
 ### Datei-Metadaten
 
 Titel, Alternativtext und Beschreibung einer Datei gelten überall, wo die Datei verwendet wird (sofern am Inhaltselement nichts Eigenes eingetragen ist). Übersetzen:
@@ -172,13 +219,25 @@ Für Tests ohne API-Key gibt es im Kontext **Development** zusätzlich den Anbie
 - **Option fehlt im Dialog**: Kein API-Key für den Anbieter, oder dem Benutzer fehlt die Berechtigung „KI-Übersetzung verwenden“.
 - **Kein Hinweis im Seiten-Modul**: Der Hinweis erscheint nur für bereits angelegte Seitenübersetzungen und Sprachen, für die der Benutzer Rechte hat.
 - **401/403**: API-Key falsch oder (DeepL) Free-Key gegen Pro-Endpoint bzw. umgekehrt – im Modul „Verbindung testen“.
-- **429 / Kontingent**: Limit beim Anbieter erreicht; später erneut versuchen oder Guthaben aufladen.
+- **429 / Kontingent**: Die Extension versucht es automatisch bis zu dreimal mit Wartezeit erneut. Bleibt der Fehler, ist das Limit beim Anbieter erreicht – später erneut versuchen oder Guthaben aufladen.
+- **„Monatslimit erreicht“**: Limit in der Extension-Konfiguration anheben, danach in der Warteschlange „Abarbeiten“ klicken.
 - Fehler werden im Modul-Protokoll und in `var/log/typo3_*.log` festgehalten.
+
+## Entwicklung & Tests
+
+```bash
+composer install            # installiert TYPO3 und das Testing-Framework nach .Build/
+composer test:unit
+composer test:functional    # SQLite, keine weitere Datenbank nötig
+```
+
+Die Tests laufen bei jedem Push per GitHub Actions (PHP 8.2 und 8.5). Die Functional-Tests übersetzen mit dem Test-Anbieter gegen eine echte Datenbank: Anlegen von Seiten und Inhalten, technische Felder von Bildreferenzen, Erkennen und Nachübersetzen geänderter Felder, Prüf-Status, Datei-Metadaten und Monatslimit.
 
 ## Roadmap
 
 - **1.1** ✓ Hinweis auf veraltete Übersetzungen, Übersicht pro Sprache, Nachübersetzen geänderter Felder, Massenübersetzung
 - **1.2** ✓ Datei-Metadaten (Titel, Alternativtext, Beschreibung) übersetzen
+- **1.3** ✓ Kostenschätzung und Monatslimit, Einstellungen pro Website, DeepL-Glossar, Prüf-Workflow, automatische Wiederholung, Tests
 
 ## Lizenz
 

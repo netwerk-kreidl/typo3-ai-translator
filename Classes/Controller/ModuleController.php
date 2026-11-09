@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Netwerk\AiTranslator\Controller;
 
 use Netwerk\AiTranslator\Configuration\ExtensionSettings;
+use Netwerk\AiTranslator\Cost\BudgetGuard;
 use Netwerk\AiTranslator\Domain\Repository\LogRepository;
 use Netwerk\AiTranslator\Provider\LanguagePair;
 use Netwerk\AiTranslator\Provider\ProviderRegistry;
@@ -55,6 +56,7 @@ final readonly class ModuleController
         private QueueRepository $queue,
         private PageRenderer $pageRenderer,
         private FileStatusService $fileStatus,
+        private BudgetGuard $budgetGuard,
     ) {}
 
     public function overviewAction(ServerRequestInterface $request): ResponseInterface
@@ -102,7 +104,8 @@ final readonly class ModuleController
                     'depth' => $node['depth'],
                     'indent' => $node['depth'] * 1.25,
                     'state' => $state,
-                    'visible' => $filter === 'all' || $state !== PageStatus::STATE_CURRENT,
+                    'visible' => $filter === 'all' || $state !== PageStatus::STATE_CURRENT || $status->getUnreviewedCount() > 0,
+                    'unreviewedCount' => $status->getUnreviewedCount(),
                     'isFolder' => $status->isFolder,
                     'outdatedCount' => $status->getOutdatedCount(),
                     'outdated' => $status->outdated,
@@ -359,7 +362,13 @@ final readonly class ModuleController
     {
         $view = $this->moduleTemplateFactory->create($request);
         $view->setTitle('KI-Übersetzung');
+        $budget = $this->budgetGuard->getStatus();
         $view->assignMultiple([
+            'budget' => $budget + [
+                'spentFormatted' => BudgetGuard::format($budget['spent']),
+                'budgetFormatted' => BudgetGuard::format($budget['budget']),
+                'percent' => $budget['budget'] > 0 ? min(100, (int)round($budget['spent'] / $budget['budget'] * 100)) : 0,
+            ],
             'nav' => [
                 ['id' => 'overview', 'label' => 'Übersicht & Massenübersetzung', 'url' => (string)$this->uriBuilder->buildUriFromRoute('ai_translator'), 'active' => $current === 'overview'],
                 ['id' => 'files', 'label' => 'Dateien (Metadaten)', 'url' => (string)$this->uriBuilder->buildUriFromRoute('ai_translator.files'), 'active' => $current === 'files'],

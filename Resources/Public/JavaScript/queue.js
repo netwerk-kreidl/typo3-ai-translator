@@ -10,6 +10,55 @@ document.querySelectorAll('[data-ait-autosubmit]').forEach((select) => {
   select.addEventListener('change', () => select.form.submit());
 });
 
+// Kostenschätzung für die Auswahl
+const estimateForm = qs('[data-ait-estimate-form]');
+const estimateOutput = estimateForm ? qs('[data-ait-estimate]', estimateForm) : null;
+let estimateTimer = null;
+let estimateRequest = 0;
+const formatNumber = (value) => new Intl.NumberFormat('de-DE').format(value);
+const updateEstimate = () => {
+  if (!estimateForm || !estimateOutput) return;
+  window.clearTimeout(estimateTimer);
+  estimateTimer = window.setTimeout(async () => {
+    const ids = [...estimateForm.querySelectorAll('[data-ait-page]:checked')].map((checkbox) => checkbox.value);
+    const provider = qs('[name="provider"]', estimateForm)?.value || '';
+    if (ids.length === 0) {
+      estimateOutput.textContent = '';
+      return;
+    }
+    const current = ++estimateRequest;
+    estimateOutput.textContent = 'Kosten werden geschätzt …';
+    try {
+      const response = await new AjaxRequest(TYPO3.settings.ajaxUrls.ai_translator_estimate).post({
+        type: estimateForm.dataset.type,
+        language: estimateForm.dataset.language,
+        provider,
+        ids,
+      });
+      const data = await response.resolve();
+      if (current !== estimateRequest) return;
+      let text = `Geschätzt: ${formatNumber(data.characters)} Zeichen, ca. ${data.costFormatted} €`;
+      if (data.budget > 0) {
+        text += ` (diesen Monat bisher ${data.spentFormatted} € von ${data.budgetFormatted} €)`;
+      }
+      estimateOutput.textContent = text;
+      estimateOutput.classList.toggle('text-danger', data.exceeds);
+      if (data.exceeds) {
+        estimateOutput.textContent += ' – überschreitet das Monatslimit, die Warteschlange hält dann an.';
+      }
+    } catch (error) {
+      if (current === estimateRequest) estimateOutput.textContent = '';
+    }
+  }, 400);
+};
+if (estimateForm) {
+  estimateForm.addEventListener('change', (event) => {
+    if (event.target.matches('[data-ait-page], [data-ait-toggle-all], [name="provider"]')) {
+      updateEstimate();
+    }
+  });
+}
+
 // Alle auswählen
 const toggleAll = qs('[data-ait-toggle-all]');
 if (toggleAll) {
@@ -17,6 +66,7 @@ if (toggleAll) {
     document.querySelectorAll('[data-ait-page]').forEach((checkbox) => {
       checkbox.checked = toggleAll.checked;
     });
+    updateEstimate();
   });
 }
 
@@ -60,6 +110,11 @@ if (box) {
         finish();
         // Fertig: Übersicht neu laden, damit der Status stimmt
         window.location.href = box.dataset.reloadUrl;
+        return;
+      }
+      if (data.item.status === 'budget') {
+        addLog(data.item.message, false);
+        finish();
         return;
       }
       processed++;

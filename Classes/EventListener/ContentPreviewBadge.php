@@ -27,19 +27,26 @@ final readonly class ContentPreviewBadge
         if ($languageId <= 0) {
             return;
         }
-        $outdated = $this->statusService->getPageStatus($record->getPid(), $languageId)->getOutdatedByTopRecord()['tt_content'] ?? [];
-        $uid = $record->getUid();
-        if (!isset($outdated[$uid]) && $record instanceof Record) {
-            $uid = $record->getOverlaidUid();
+        $status = $this->statusService->getPageStatus($record->getPid(), $languageId);
+        $outdated = $status->getOutdatedByTopRecord()['tt_content'] ?? [];
+        $uids = array_unique(array_filter([$record->getUid(), $record instanceof Record ? $record->getOverlaidUid() : 0]));
+        $badges = '';
+        foreach ($uids as $uid) {
+            if (isset($outdated[$uid])) {
+                $fields = htmlspecialchars(implode(', ', $outdated[$uid]));
+                $badges .= '<span class="badge badge-warning" title="Geändert: ' . $fields . '">Übersetzung veraltet</span> '
+                    . '<span class="small text-body-secondary">Geändert: ' . $fields . '</span> ';
+            }
+            if ($status->isUnreviewed('tt_content', $uid)) {
+                $badges .= '<span class="badge badge-info" title="Automatisch übersetzt und noch von niemandem gespeichert. Nach dem Prüfen einmal speichern.">KI-übersetzt – bitte prüfen</span> ';
+            }
+            if ($badges !== '') {
+                break;
+            }
         }
-        if (!isset($outdated[$uid])) {
+        if ($badges === '') {
             return;
         }
-        $fields = htmlspecialchars(implode(', ', $outdated[$uid]));
-        $event->setPreviewContent(
-            '<p class="mb-2"><span class="badge badge-warning" title="Geändert: ' . $fields . '">'
-            . 'Übersetzung veraltet</span> <span class="small text-body-secondary">Geändert: ' . $fields . '</span></p>'
-            . $event->getPreviewContent()
-        );
+        $event->setPreviewContent('<p class="mb-2">' . trim($badges) . '</p>' . $event->getPreviewContent());
     }
 }

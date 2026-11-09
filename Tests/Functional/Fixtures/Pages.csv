@@ -1,0 +1,23 @@
+"be_users"
+,"uid","pid","username","password","admin","lang"
+,1,0,"admin","$argon2i$v=19$m=65536,t=16,p=1$c29tZXNhbHQ$oZG8rVgg8U9ZpJ7Km1IUPdsWbg4M7kGNcOqZbPpmFLI",1,"default"
+"pages"
+,"uid","pid","title","slug","sys_language_uid","l10n_parent","doktype","is_siteroot","description"
+,1,0,"Start","/",0,0,1,1,""
+,2,1,"Zimmer & Suiten","/zimmer-suiten",0,0,1,0,"Unsere Zimmer in der Josefstadt"
+"tt_content"
+,"uid","pid","CType","colPos","sorting","sys_language_uid","l18n_parent","header","bodytext","image"
+,10,2,"textpic",0,256,0,0,"Unsere Zimmer","<p>Mehr zur <a href=""t3://page?uid=1"" title=""Zur Startseite"">Lage</a></p>",1
+,11,2,"text",0,512,0,0,"Zweiter Text","<p>Hallo Welt</p>",0
+"sys_file_storage"
+,"uid","pid","name","driver","is_default","is_browsable","is_public","is_writable","is_online"
+,1,0,"fileadmin","Local",1,1,1,1,1
+"sys_file"
+,"uid","pid","storage","identifier","identifier_hash","name","extension","mime_type","type","missing"
+,1,0,1,"/user_upload/fassade.jpg","a","fassade.jpg","jpg","image/jpeg",2,0
+"sys_file_metadata"
+,"uid","pid","file","sys_language_uid","l10n_parent","title","alternative","description"
+,1,0,1,0,0,"","Fassade des Hotels",""
+"sys_file_reference"
+,"uid","pid","uid_local","uid_foreign","tablenames","fieldname","sorting_foreign","sys_language_uid","l10n_parent","title","alternative"
+,1,2,1,10,"tt_content","image",1,0,0,"Bildtitel","Alternativtext am Element"

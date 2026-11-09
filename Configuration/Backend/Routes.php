@@ -15,4 +15,10 @@ return [
         'path' => '/ai-translator/file',
         'target' => UpdateController::class . '::fileAction',
     ],
+    // Alle KI-Übersetzungen einer Seite als geprüft markieren (Hinweis im Seiten-Modul)
+    'ai_translator_review' => [
+        'path' => '/ai-translator/review',
+        'target' => UpdateController::class . '::reviewAction',
+        'methods' => ['POST'],
+    ],
 ];

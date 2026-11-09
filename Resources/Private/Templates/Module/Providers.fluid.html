@@ -30,6 +30,7 @@
                                             <f:then>{usage.input_tokens -> f:format.number(decimals: 0, thousandsSeparator: '.')} / {usage.output_tokens -> f:format.number(decimals: 0, thousandsSeparator: '.')} Tokens</f:then>
                                             <f:else>{usage.characters -> f:format.number(decimals: 0, thousandsSeparator: '.')} Zeichen</f:else>
                                         </f:if>
+                                        · ca. {usage.cost -> f:format.number(decimals: 2, decimalSeparator: ',', thousandsSeparator: '.')} €
                                     </p>
                                 </f:if>
                                 <form method="post" action="{testUrl}">
@@ -77,6 +78,7 @@
                                         <f:then>{entry.input_tokens} / {entry.output_tokens} Tokens</f:then>
                                         <f:else>{entry.characters} Zeichen</f:else>
                                     </f:if>
+                                    <f:if condition="{entry.cost} > 0"><br />ca. {entry.cost -> f:format.number(decimals: 3, decimalSeparator: ',', thousandsSeparator: '.')} €</f:if>
                                 </td>
                                 <td>{entry.userName}</td>
                                 <td>

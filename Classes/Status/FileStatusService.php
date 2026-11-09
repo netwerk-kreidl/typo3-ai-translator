@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Netwerk\AiTranslator\Status;
 
+use Netwerk\AiTranslator\Domain\Repository\StateRepository;
 use Netwerk\AiTranslator\Security\Permission;
 use Netwerk\AiTranslator\Service\FieldResolver;
 use Netwerk\AiTranslator\Service\RecordFinder;
@@ -32,14 +33,15 @@ final class FileStatusService
         private readonly StatusService $statusService,
         private readonly ConnectionPool $connectionPool,
         private readonly SiteFinder $siteFinder,
+        private readonly StateRepository $stateRepository,
     ) {}
 
     /**
-     * @return array{state: string, metaUid: int, translationUid: int, fields: array<string, string>, source: array<string, string>, translation: array<string, string>}
+     * @return array{state: string, metaUid: int, translationUid: int, fields: array<string, string>, source: array<string, string>, translation: array<string, string>, unreviewed: bool}
      */
     public function getStatus(int $fileUid, int $languageId): array
     {
-        $result = ['state' => self::STATE_EMPTY, 'metaUid' => 0, 'translationUid' => 0, 'fields' => [], 'source' => [], 'translation' => []];
+        $result = ['state' => self::STATE_EMPTY, 'metaUid' => 0, 'translationUid' => 0, 'fields' => [], 'source' => [], 'translation' => [], 'unreviewed' => false];
         $metadata = $this->finder->findFileMetadata($fileUid);
         if ($metadata === null) {
             return $result;
@@ -68,6 +70,7 @@ final class FileStatusService
             }
         }
         $result['fields'] = $this->statusService->getChangedFields('sys_file_metadata', $metadata, $translation);
+        $result['unreviewed'] = $this->stateRepository->isUnreviewed('sys_file_metadata', (int)$translationUid);
         $result['state'] = $result['fields'] !== [] ? self::STATE_OUTDATED : self::STATE_CURRENT;
         return $result;
     }

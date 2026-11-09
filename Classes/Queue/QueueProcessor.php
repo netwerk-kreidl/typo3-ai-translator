@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Netwerk\AiTranslator\Queue;
 
+use Netwerk\AiTranslator\Cost\BudgetExceededException;
 use Netwerk\AiTranslator\Service\TranslationService;
 use Psr\Log\LoggerInterface;
 use TYPO3\CMS\Backend\Utility\BackendUtility;
@@ -18,6 +19,9 @@ final readonly class QueueProcessor
         private TranslationService $translationService,
         private LoggerInterface $logger,
     ) {}
+
+    /** Status, wenn das Monatslimit erreicht ist – die Verarbeitung soll dann anhalten */
+    public const STATUS_BUDGET = 'budget';
 
     /**
      * Verarbeitet den nächsten Eintrag.
@@ -54,6 +58,9 @@ final readonly class QueueProcessor
             }
             $this->queue->finish($uid, QueueRepository::DONE, $message);
             return ['uid' => $uid, 'page' => $pageUid, 'title' => $title, 'status' => QueueRepository::DONE, 'message' => $message];
+        } catch (BudgetExceededException $e) {
+            $this->queue->release($uid, $e->getMessage());
+            return ['uid' => $uid, 'page' => $pageUid, 'title' => $title, 'status' => self::STATUS_BUDGET, 'message' => $e->getMessage()];
         } catch (\Throwable $e) {
             $this->logger->error('AI translation of {table} {page} failed: {message}', ['table' => $item['tablename'] ?? 'pages', 'page' => $pageUid, 'message' => $e->getMessage(), 'exception' => $e]);
             $this->queue->finish($uid, QueueRepository::ERROR, $e->getMessage());

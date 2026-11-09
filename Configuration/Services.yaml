@@ -31,3 +31,8 @@ services:
 
   Netwerk\AiTranslator\Status\FileStatusService:
     public: true
+
+  # Öffentlich, weil der DataHandler-Hook (Review\DataHandlerHook) per makeInstance zugreift
+  Netwerk\AiTranslator\Domain\Repository\:
+    resource: '../Classes/Domain/Repository/*'
+    public: true

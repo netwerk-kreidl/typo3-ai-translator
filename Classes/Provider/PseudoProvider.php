@@ -7,7 +7,7 @@ namespace Netwerk\AiTranslator\Provider;
 use TYPO3\CMS\Core\Core\Environment;
 
 /**
- * Test-Anbieter ohne KI und ohne Kosten – nur im Kontext „Development“ verfügbar.
+ * Test-Anbieter ohne KI und ohne Kosten – nur in den Kontexten „Development“ und „Testing“ verfügbar.
  * Setzt „[EN] “ vor jeden Text, damit sich der gesamte Ablauf (Felder, Links, Slug, Protokoll)
  * ohne API-Key prüfen lässt.
  */
@@ -25,7 +25,7 @@ final class PseudoProvider implements TranslationProviderInterface
 
     public function isConfigured(): bool
     {
-        return Environment::getContext()->isDevelopment();
+        return Environment::getContext()->isDevelopment() || Environment::getContext()->isTesting();
     }
 
     public function translate(TranslationRequest $request): TranslationResult

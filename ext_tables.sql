@@ -15,6 +15,7 @@ CREATE TABLE tx_aitranslator_log (
     characters int(11) unsigned DEFAULT '0' NOT NULL,
     input_tokens int(11) unsigned DEFAULT '0' NOT NULL,
     output_tokens int(11) unsigned DEFAULT '0' NOT NULL,
+    cost double(11,4) DEFAULT '0.0000' NOT NULL,
     status varchar(20) DEFAULT '' NOT NULL,
     message text,
 
@@ -37,6 +38,11 @@ CREATE TABLE tx_aitranslator_state (
     translation_hash varchar(32) DEFAULT '' NOT NULL,
     provider varchar(50) DEFAULT '' NOT NULL,
     tstamp int(11) unsigned DEFAULT '0' NOT NULL,
+    # Oberster Datensatz der Übersetzung (z. B. Inhaltselement eines FAQ-Eintrags) – für Hinweise im Seiten-Modul
+    top_tablename varchar(255) DEFAULT '' NOT NULL,
+    top_uid int(11) unsigned DEFAULT '0' NOT NULL,
+    # 0 = KI-übersetzt, noch nicht von einem Redakteur gespeichert/geprüft
+    reviewed tinyint(1) unsigned DEFAULT '0' NOT NULL,
 
     UNIQUE KEY translation_field (tablename, translation_uid, field),
     KEY source (tablename, source_uid, language),

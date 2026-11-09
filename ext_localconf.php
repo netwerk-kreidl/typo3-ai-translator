@@ -13,3 +13,7 @@ $GLOBALS['TYPO3_CONF_VARS']['BE']['customPermOptions']['tx_aitranslator'] = [
         ],
     ],
 ];
+
+// Speichert ein Redakteur eine KI-Übersetzung, gilt sie als geprüft
+$GLOBALS['TYPO3_CONF_VARS']['SC_OPTIONS']['t3lib/class.t3lib_tcemain.php']['processDatamapClass']['ai_translator']
+    = \Netwerk\AiTranslator\Review\DataHandlerHook::class;

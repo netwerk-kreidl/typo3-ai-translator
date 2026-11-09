@@ -56,16 +56,19 @@ final readonly class PageLayoutHint
             }
             $status = $this->statusService->getPageStatus($pageUid, $languageId);
             // Fehlende Seitenübersetzungen zeigt TYPO3 selbst an
-            if (!$status->needsUpdate() || $status->getState() === PageStatus::STATE_NOT_TRANSLATED) {
+            $needsUpdate = $status->needsUpdate() && $status->getState() !== PageStatus::STATE_NOT_TRANSLATED;
+            if (!$needsUpdate && $status->getUnreviewedCount() === 0) {
                 continue;
             }
             $languages[] = [
                 'id' => $languageId,
                 'title' => $language->getTitle(),
                 'flag' => $language->getFlagIdentifier(),
+                'needsUpdate' => $needsUpdate,
                 'outdated' => $status->outdated,
                 'outdatedCount' => $status->getOutdatedCount(),
                 'missing' => $status->missing,
+                'unreviewedCount' => $status->getUnreviewedCount(),
             ];
         }
         if ($languages === []) {
@@ -89,6 +92,7 @@ final readonly class PageLayoutHint
             'providers' => $providers,
             'canTranslate' => $canTranslate && $providers !== [],
             'updateUrl' => (string)$this->uriBuilder->buildUriFromRoute('ai_translator_update'),
+            'reviewUrl' => (string)$this->uriBuilder->buildUriFromRoute('ai_translator_review'),
             'returnUrl' => (string)$request->getUri(),
         ]);
         $event->addHeaderContent($view->render('PageLayout/Hint'));

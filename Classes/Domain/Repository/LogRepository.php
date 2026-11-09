@@ -34,13 +34,13 @@ final class LogRepository
     }
 
     /**
-     * @return array<string, array{runs: int, characters: int, input_tokens: int, output_tokens: int}>
+     * @return array<string, array{runs: int, characters: int, input_tokens: int, output_tokens: int, cost: float}>
      */
     public function getTotalsByProvider(int $since): array
     {
         $qb = $this->connectionPool->getQueryBuilderForTable(self::TABLE);
         $rows = $qb->select('provider')
-            ->addSelectLiteral('COUNT(*) AS runs, SUM(characters) AS characters, SUM(input_tokens) AS input_tokens, SUM(output_tokens) AS output_tokens')
+            ->addSelectLiteral('COUNT(*) AS runs, SUM(characters) AS characters, SUM(input_tokens) AS input_tokens, SUM(output_tokens) AS output_tokens, SUM(cost) AS cost')
             ->from(self::TABLE)
             ->where(
                 $qb->expr()->gte('crdate', $qb->createNamedParameter($since, Connection::PARAM_INT)),
@@ -55,8 +55,20 @@ final class LogRepository
                 'characters' => (int)$row['characters'],
                 'input_tokens' => (int)$row['input_tokens'],
                 'output_tokens' => (int)$row['output_tokens'],
+                'cost' => round((float)$row['cost'], 2),
             ];
         }
         return $result;
+    }
+
+    /**
+     * Kosten (geschätzt, in Euro) seit Monatsbeginn.
+     */
+    public function getMonthCost(): float
+    {
+        $qb = $this->connectionPool->getQueryBuilderForTable(self::TABLE);
+        return (float)$qb->addSelectLiteral('SUM(cost)')->from(self::TABLE)->where(
+            $qb->expr()->gte('crdate', $qb->createNamedParameter((int)strtotime(date('Y-m-01 00:00:00')), Connection::PARAM_INT)),
+        )->executeQuery()->fetchOne();
     }
 }

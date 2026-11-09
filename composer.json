@@ -28,7 +28,31 @@
     },
     "extra": {
         "typo3/cms": {
-            "extension-key": "ai_translator"
+            "extension-key": "ai_translator",
+            "web-dir": ".Build/public"
         }
+    },
+    "require-dev": {
+        "typo3/testing-framework": "^9.7",
+        "typo3/cms-fluid-styled-content": "^14.3",
+        "phpunit/phpunit": "^11.5 || ^12.1"
+    },
+    "config": {
+        "vendor-dir": ".Build/vendor",
+        "bin-dir": ".Build/bin",
+        "sort-packages": true,
+        "allow-plugins": {
+            "typo3/class-alias-loader": true,
+            "typo3/cms-composer-installers": true,
+            "php-http/discovery": true
+        }
+    },
+    "scripts": {
+        "test:unit": "phpunit -c Build/phpunit/UnitTests.xml",
+        "test:functional": "phpunit -c Build/phpunit/FunctionalTests.xml",
+        "test": [
+            "@test:unit",
+            "@test:functional"
+        ]
     }
 }

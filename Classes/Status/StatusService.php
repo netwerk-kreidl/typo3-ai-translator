@@ -63,7 +63,8 @@ final class StatusService
             }
             $this->check($table, $record['row'], $translationUid, $languageId, $table, $translationUid, $outdated);
         }
-        return $this->cache[$key] = new PageStatus($pageUid, $languageId, $isFolder, $pageTranslationUid, $outdated, $missing);
+        $unreviewed = $this->stateRepository->findUnreviewed($pageUid, $languageId);
+        return $this->cache[$key] = new PageStatus($pageUid, $languageId, $isFolder, $pageTranslationUid, $outdated, $missing, $unreviewed);
     }
 
     /**
