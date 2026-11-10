@@ -25,8 +25,11 @@ use TYPO3\TestingFramework\Core\Functional\FunctionalTestCase;
  */
 final class TranslationServiceTest extends FunctionalTestCase
 {
-    protected array $coreExtensionsToLoad = ['fluid_styled_content', 'filelist'];
-    protected array $testExtensionsToLoad = ['netwerk/typo3-ai-translator'];
+    protected array $coreExtensionsToLoad = ['fluid_styled_content', 'filelist', 'seo'];
+    protected array $testExtensionsToLoad = [
+        'netwerk/typo3-ai-translator',
+        __DIR__ . '/Fixtures/Extensions/render_type_fixture',
+    ];
 
     protected function setUp(): void
     {
@@ -46,6 +49,8 @@ final class TranslationServiceTest extends FunctionalTestCase
         $page = $this->findTranslation('pages', 'l10n_parent', 2);
         self::assertSame('[EN] Zimmer & Suiten', $page['title']);
         self::assertSame('[EN] Unsere Zimmer in der Josefstadt', $page['description']);
+        // SEO-Titel mit eigener Darstellung (wie bei cs_seo) wird ebenfalls übersetzt
+        self::assertSame('[EN] Zimmer & Suiten in Wien', $page['seo_title']);
 
         $content = $this->findTranslation('tt_content', 'l18n_parent', 10);
         self::assertSame('[EN] Unsere Zimmer', $content['header']);

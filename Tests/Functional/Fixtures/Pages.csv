@@ -2,9 +2,9 @@
 ,"uid","pid","username","password","admin","lang"
 ,1,0,"admin","$argon2i$v=19$m=65536,t=16,p=1$c29tZXNhbHQ$oZG8rVgg8U9ZpJ7Km1IUPdsWbg4M7kGNcOqZbPpmFLI",1,"default"
 "pages"
-,"uid","pid","title","slug","sys_language_uid","l10n_parent","doktype","is_siteroot","description"
-,1,0,"Start","/",0,0,1,1,""
-,2,1,"Zimmer & Suiten","/zimmer-suiten",0,0,1,0,"Unsere Zimmer in der Josefstadt"
+,"uid","pid","title","slug","sys_language_uid","l10n_parent","doktype","is_siteroot","description","seo_title"
+,1,0,"Start","/",0,0,1,1,"",""
+,2,1,"Zimmer & Suiten","/zimmer-suiten",0,0,1,0,"Unsere Zimmer in der Josefstadt","Zimmer & Suiten in Wien"
 "tt_content"
 ,"uid","pid","CType","colPos","sorting","sys_language_uid","l18n_parent","header","bodytext","image"
 ,10,2,"textpic",0,256,0,0,"Unsere Zimmer","<p>Mehr zur <a href=""t3://page?uid=1"" title=""Zur Startseite"">Lage</a></p>",1

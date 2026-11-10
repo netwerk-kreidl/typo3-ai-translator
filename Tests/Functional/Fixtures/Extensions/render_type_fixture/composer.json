@@ -1,0 +1,7 @@
+{
+    "name": "netwerk/ai-translator-render-type-fixture",
+    "type": "typo3-cms-extension",
+    "description": "Test fixture: SEO title with custom renderType like cs_seo",
+    "require": {"typo3/cms-core": "*"},
+    "extra": {"typo3/cms": {"extension-key": "render_type_fixture"}}
+}

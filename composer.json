@@ -33,9 +33,10 @@
         }
     },
     "require-dev": {
-        "typo3/testing-framework": "^9.7",
+        "phpunit/phpunit": "^11.5 || ^12.1",
         "typo3/cms-fluid-styled-content": "^14.3",
-        "phpunit/phpunit": "^11.5 || ^12.1"
+        "typo3/cms-seo": "^14.3",
+        "typo3/testing-framework": "^9.7"
     },
     "config": {
         "vendor-dir": ".Build/vendor",

@@ -36,6 +36,11 @@ final class FieldResolver
         'sys_file_metadata' => ['title', 'alternative', 'description', 'caption'],
     ];
 
+    /** Darstellungen von Eingabefeldern, die keinen übersetzbaren Text enthalten */
+    private const NON_TEXT_RENDER_TYPES = [
+        'inputDateTime', 'inputLink', 'colorpicker', 'passwordGenerator', 'slug', 'codeEditor', 't3editor',
+    ];
+
     /** Technische Verknüpfungsfelder von Inline-Kindern */
     private const RELATION_FIELDS = ['tablenames', 'fieldname', 'table_local', 'uid_local', 'uid_foreign', 'foreign_table_parent_uid', 'parenttable', 'parentid', 'parentfield'];
 
@@ -152,7 +157,9 @@ final class FieldResolver
                 return false;
             }
         }
-        return ($config['renderType'] ?? '') === '';
+        // Eigene Darstellungen anderer Extensions (z. B. cs_seo „snippetPreview“ beim SEO-Titel) enthalten
+        // weiterhin Text – nur bekannte Nicht-Text-Darstellungen werden ausgeschlossen.
+        return !in_array((string)($config['renderType'] ?? ''), self::NON_TEXT_RENDER_TYPES, true);
     }
 
     /**
