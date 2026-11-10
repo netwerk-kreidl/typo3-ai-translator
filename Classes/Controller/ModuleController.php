@@ -358,6 +358,15 @@ final readonly class ModuleController
         return $recent;
     }
 
+    /**
+     * @return array<string, string>
+     */
+    private static function queryParameters(string $url): array
+    {
+        parse_str((string)parse_url($url, PHP_URL_QUERY), $parameters);
+        return array_filter($parameters, 'is_string');
+    }
+
     private function createView(ServerRequestInterface $request, string $current): ModuleTemplate
     {
         $view = $this->moduleTemplateFactory->create($request);
@@ -369,6 +378,9 @@ final readonly class ModuleController
                 'budgetFormatted' => BudgetGuard::format($budget['budget']),
                 'percent' => $budget['budget'] > 0 ? min(100, (int)round($budget['spent'] / $budget['budget'] * 100)) : 0,
             ],
+            // GET-Formulare (Filter) ersetzen die Parameter der Ziel-Adresse – Token als verstecktes Feld mitgeben
+            'filterUrl' => $filterUrl = (string)$this->uriBuilder->buildUriFromRoute($current === 'files' ? 'ai_translator.files' : 'ai_translator'),
+            'filterHiddenFields' => self::queryParameters($filterUrl),
             'nav' => [
                 ['id' => 'overview', 'label' => 'Übersicht & Massenübersetzung', 'url' => (string)$this->uriBuilder->buildUriFromRoute('ai_translator'), 'active' => $current === 'overview'],
                 ['id' => 'files', 'label' => 'Dateien (Metadaten)', 'url' => (string)$this->uriBuilder->buildUriFromRoute('ai_translator.files'), 'active' => $current === 'files'],

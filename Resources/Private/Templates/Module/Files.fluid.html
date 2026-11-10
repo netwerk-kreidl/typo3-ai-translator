@@ -11,7 +11,8 @@
     <f:if condition="!{languages}">
         <f:then><p>Es ist keine weitere Sprache eingerichtet bzw. freigegeben.</p></f:then>
         <f:else>
-            <form method="get" action="{f:be.uri(route: 'ai_translator.files')}" class="d-flex flex-wrap gap-3 align-items-end mb-3">
+            <form method="get" action="{filterUrl}" class="d-flex flex-wrap gap-3 align-items-end mb-3">
+                <f:for each="{filterHiddenFields}" as="value" key="name"><input type="hidden" name="{name}" value="{value}" /></f:for>
                 <f:if condition="{storages}">
                     <f:then>
                         <div>
