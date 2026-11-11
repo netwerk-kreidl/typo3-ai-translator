@@ -115,6 +115,30 @@ final class RecordFinder
     }
 
     /**
+     * Hat eine Übersetzung eigene Unterelemente, die nicht mit der Standardsprache verbunden sind?
+     *
+     * @param array{field: string, table: string, foreignField: string, matchFields: array<string, string>} $relation
+     */
+    public function hasUnconnectedChildren(array $relation, int $translationUid): bool
+    {
+        $schema = $this->tcaSchemaFactory->get($relation['table']);
+        if (!$schema->isLanguageAware()) {
+            return false;
+        }
+        $pointer = $this->getLanguageCapability($relation['table'])->getTranslationOriginPointerField()->getName();
+        $qb = $this->connectionPool->getQueryBuilderForTable($relation['table']);
+        $qb->getRestrictions()->removeAll()->add(GeneralUtility::makeInstance(DeletedRestriction::class));
+        $qb->count('uid')->from($relation['table'])->where(
+            $qb->expr()->eq($relation['foreignField'], $qb->createNamedParameter($translationUid, Connection::PARAM_INT)),
+            $qb->expr()->eq($pointer, 0),
+        );
+        foreach ($relation['matchFields'] as $field => $value) {
+            $qb->andWhere($qb->expr()->eq($field, $qb->createNamedParameter($value)));
+        }
+        return (int)$qb->executeQuery()->fetchOne() > 0;
+    }
+
+    /**
      * Übersetzung eines Datensatzes: verbunden (Übersetzungs-Ursprung) oder frei kopiert (Übersetzungs-Quelle).
      *
      * @param array<string, array<int, int>> $copyMapping Zuordnung aus dem DataHandler (frisch angelegt)

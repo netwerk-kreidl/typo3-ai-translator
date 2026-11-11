@@ -184,6 +184,7 @@ Ein Feld gilt als veraltet, wenn sich der Ausgangstext seit der Übersetzung ge�
 - **Verbundene Übersetzungen** (Standard): Vergleich mit dem Stand, den TYPO3 beim Speichern der Übersetzung festhält (`l10n_diffsource`). Das funktioniert auch für Inhalte, die von Hand übersetzt wurden. Wie im TYPO3-Standard gilt eine Übersetzung als geprüft, sobald sie im Formular gespeichert wird.
 - **Freie Übersetzungen** (Kopien): Vergleich mit dem Fingerabdruck, den die KI-Übersetzung gespeichert hat; wurde das übersetzte Feld seitdem von Hand geändert, gilt es als erledigt.
 - **Neue Unterelemente** (z. B. FAQ-Fragen, Bilder) und **noch nicht übersetzte Inhaltselemente** werden ebenfalls gemeldet und beim Aktualisieren ergänzt.
+- **Eigene Bilder je Sprache** (z. B. Grafiken mit Text): Hat die Übersetzung in einem Feld eigene, nicht verbundene Bilder oder ist dort „Wert der Standardsprache verwenden“ abgewählt (`l10n_state` = custom), gilt das Bild der Standardsprache nicht als fehlend und wird beim Aktualisieren nicht ergänzt. Tipp: Bildfelder mit `behaviour.allowLanguageSynchronization` konfigurieren, dann können Redakteure je Übersetzung zwischen Standardsprache und eigenem Bild wählen.
 
 Beim Aktualisieren wird die URL (Slug) bestehender Übersetzungen **nicht** verändert, damit keine Links brechen. Soll sie zum neuen Titel passen, in den Seiteneigenschaften der Übersetzung neu erzeugen (TYPO3 legt dabei eine Weiterleitung an).
 

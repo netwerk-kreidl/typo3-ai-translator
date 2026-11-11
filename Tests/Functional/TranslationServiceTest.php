@@ -93,6 +93,34 @@ final class TranslationServiceTest extends FunctionalTestCase
     }
 
     #[Test]
+    public function ownImageInTranslationIsNotReportedAsMissing(): void
+    {
+        $this->get(TranslationService::class)->updatePage(2, 1, 'pseudo');
+        $content = $this->findTranslation('tt_content', 'l18n_parent', 10);
+        $reference = $this->findTranslation('sys_file_reference', 'l10n_parent', 1);
+        $connection = $this->get(ConnectionPool::class)->getConnectionForTable('sys_file_reference');
+        // Redakteur entfernt das übernommene deutsche Bild und fügt eine eigene (englische) Grafik ein
+        $connection->update('sys_file_reference', ['deleted' => 1], ['uid' => (int)$reference['uid']]);
+        $connection->insert('sys_file_reference', [
+            'pid' => 2, 'uid_local' => 1, 'uid_foreign' => (int)$content['uid'], 'tablenames' => 'tt_content',
+            'fieldname' => 'image', 'sys_language_uid' => 1, 'l10n_parent' => 0, 'alternative' => 'English graphic',
+        ]);
+
+        $status = $this->get(StatusService::class)->getPageStatus(2, 1, true);
+        self::assertSame(PageStatus::STATE_CURRENT, $status->getState());
+        // Aktualisieren lässt das eigene Bild unangetastet
+        $this->get(TranslationService::class)->updatePage(2, 1, 'pseudo');
+        $qb = $this->get(ConnectionPool::class)->getQueryBuilderForTable('sys_file_reference');
+        $qb->getRestrictions()->removeAll();
+        $images = $qb->select('l10n_parent', 'alternative')->from('sys_file_reference')->where(
+            $qb->expr()->eq('uid_foreign', (int)$content['uid']),
+            $qb->expr()->eq('tablenames', $qb->createNamedParameter('tt_content')),
+            $qb->expr()->eq('deleted', 0),
+        )->executeQuery()->fetchAllAssociative();
+        self::assertSame([['l10n_parent' => 0, 'alternative' => 'English graphic']], $images);
+    }
+
+    #[Test]
     public function aiTranslationsAreUnreviewedUntilAnEditorSavesThem(): void
     {
         $this->get(TranslationService::class)->updatePage(2, 1, 'pseudo');

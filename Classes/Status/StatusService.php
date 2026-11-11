@@ -119,11 +119,14 @@ final class StatusService
         $isConnected = (int)($translation[$capability->getTranslationOriginPointerField()->getName()] ?? 0) > 0;
         if ($depth < 4) {
             foreach ($this->fieldResolver->getChildRelations($table, $source) as $relation) {
+                // Eigene Unterelemente der Übersetzung (z. B. englische Grafik statt der deutschen):
+                // fehlende Elemente der Standardsprache sind dann gewollt und werden nicht gemeldet
+                $isCustom = $this->usesCustomValue($table, $translation, $relation);
                 foreach ($this->finder->findChildren($relation, (int)$source['uid']) as $child) {
                     $childTranslationUid = $this->finder->findTranslationUid($relation['table'], (int)$child['uid'], $languageId);
                     if ($childTranslationUid === null) {
                         // Neue Unterelemente lassen sich nur bei verbundenen Übersetzungen automatisch ergänzen
-                        if ($isConnected) {
+                        if ($isConnected && !$isCustom) {
                             $newChildren[$relation['field']]['table'] = $relation['table'];
                             $newChildren[$relation['field']]['uids'][] = (int)$child['uid'];
                         }
@@ -146,6 +149,23 @@ final class StatusService
                 $topTranslationUid,
             );
         }
+    }
+
+    /**
+     * Hat die Übersetzung in diesem Feld einen eigenen Wert? Entweder ausdrücklich gewählt
+     * („Wert der Standardsprache verwenden“ abgewählt, l10n_state = custom) oder sie enthält
+     * eigene, nicht mit der Standardsprache verbundene Unterelemente.
+     *
+     * @param array<string, mixed> $translation
+     * @param array{field: string, table: string, foreignField: string, matchFields: array<string, string>} $relation
+     */
+    private function usesCustomValue(string $table, array $translation, array $relation): bool
+    {
+        $state = json_decode((string)($translation['l10n_state'] ?? ''), true);
+        if (is_array($state) && ($state[$relation['field']] ?? '') === 'custom') {
+            return true;
+        }
+        return $this->finder->hasUnconnectedChildren($relation, (int)$translation['uid']);
     }
 
     /**
